@@ -1,0 +1,22 @@
+{
+  "name": "nuxt_demo",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "@element-plus/nuxt": "^1.1.5",
+    "@pinia/nuxt": "^1.0.3",
+    "element-plus": "^2.14.7",
+    "nuxt": "^4.6.2",
+    "pinia": "^4.1.0",
+    "vue": "^3.5.43",
+    "vue-router": "^5.4.0"
+  }
+}

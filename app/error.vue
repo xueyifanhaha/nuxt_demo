@@ -1,0 +1,77 @@
+<script setup lang="ts">
+import type { NuxtError } from '#app'
+
+const props = defineProps<{
+  error: NuxtError
+}>()
+
+const is404 = computed(() => props.error?.statusCode === 404)
+
+useHead({ title: '出错了 · 商品运营后台' })
+</script>
+
+<template>
+  <div class="error-shell">
+    <div class="card">
+      <p class="code">{{ error?.statusCode ?? 500 }}</p>
+      <h1>{{ is404 ? '页面不存在' : '服务开小差了' }}</h1>
+      <p class="desc">
+        {{ is404 ? '你访问的地址不存在或已被移除。' : '发生了一个意外错误，请稍后重试。' }}
+      </p>
+      <NuxtLink to="/" class="btn">回到首页</NuxtLink>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.error-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--app-bg);
+}
+
+.card {
+  text-align: center;
+  padding: 44px 56px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+}
+
+.code {
+  font-size: 40px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: #d1d5db;
+  line-height: 1;
+}
+
+.card h1 {
+  margin-top: 14px;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.desc {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--app-muted);
+}
+
+.btn {
+  display: inline-block;
+  margin-top: 24px;
+  padding: 9px 22px;
+  border-radius: 8px;
+  background: var(--el-color-primary);
+  color: #ffffff;
+  font-size: 13.5px;
+  transition: background 0.15s;
+}
+
+.btn:hover {
+  background: var(--el-color-primary-dark-2);
+}
+</style>
