@@ -3,7 +3,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { PERM } from '#shared/permissions'
 import type { Product, ProductStatus } from '#shared/types'
-import { MOCK_CATEGORIES, MOCK_PRODUCTS } from '~/utils/mock'
+import { SEED_CATEGORIES, SEED_PRODUCTS } from '#shared/seed'
 
 definePageMeta({ layout: 'default' })
 useHead({ title: '商品管理 · 商品运营后台' })
@@ -11,9 +11,9 @@ useHead({ title: '商品管理 · 商品运营后台' })
 const { can, role } = usePermission()
 
 /* ---------- 静态数据：服务端接口接入后替换 ---------- */
-const CATEGORIES = MOCK_CATEGORIES
+const CATEGORIES = SEED_CATEGORIES
 /** 本地可变副本：上下架、删除直接改这里，接口阶段换成对应请求 */
-const products = ref([...MOCK_PRODUCTS])
+const products = ref([...SEED_PRODUCTS])
 
 /* ---------- 筛选与分页（暂时在本地算，接接口后改成 query 参数） ---------- */
 const filters = reactive<{

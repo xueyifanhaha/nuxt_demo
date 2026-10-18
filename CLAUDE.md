@@ -47,7 +47,7 @@ Nuxt 4，源码目录是 `app/`（不是根目录 `pages/`）。
 
 ## 当前实现状态
 
-- `login.vue`：静态校验，账号 admin/editor/viewer 密码 123456，提交只弹提示；`/api/auth/login` 未实现。
+- `login.vue`：静态校验，账号 admin/editor/viewer 密码 demo-123456，提交只弹提示；`/api/auth/login` 未实现。
 - `admin/products/index.vue`：唯一有完整内容的页面，12 条 mock 商品、本地筛选/搜索/分页；编辑、上下架、新建按钮都只弹占位提示。
 - `admin/categories.vue`、`logs.vue`、`roles.vue`、`products/[id].vue`：只有 `<h1>` 占位。
 - 已有页面结构与交互范式（卡片、分页、表格、权限过滤）应作为后续页面的模板。

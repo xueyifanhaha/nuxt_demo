@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { Refresh, Search } from '@element-plus/icons-vue'
 import type { LogEntry } from '#shared/types'
-import { MOCK_LOGS } from '~/utils/mock'
+import { SEED_LOGS } from '#shared/seed'
 
 definePageMeta({ layout: 'default' })
 useHead({ title: '操作日志 · 商品运营后台' })
 
 /* ---------- 静态数据：服务端接口接入后替换（GET /api/logs） ---------- */
-const logs = ref<LogEntry[]>([...MOCK_LOGS])
+const logs = ref<LogEntry[]>([...SEED_LOGS])
 
 /** 动作类型 → 展示文案与标签色（接口阶段可与服务端共用一份枚举） */
 const ACTION_META: Record<string, { label: string; tag: 'primary' | 'success' | 'warning' | 'danger' | 'info' }> = {

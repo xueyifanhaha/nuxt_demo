@@ -3,7 +3,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import { PERM } from '#shared/permissions'
 import type { Category } from '#shared/types'
-import { MOCK_CATEGORIES, MOCK_PRODUCTS } from '~/utils/mock'
+import { SEED_CATEGORIES, SEED_PRODUCTS } from '#shared/seed'
 
 definePageMeta({ layout: 'default' })
 useHead({ title: '分类管理 · 商品运营后台' })
@@ -11,12 +11,12 @@ useHead({ title: '分类管理 · 商品运营后台' })
 const { can, role } = usePermission()
 
 /* ---------- 静态数据：服务端接口接入后替换 ---------- */
-let nextId = Math.max(...MOCK_CATEGORIES.map(item => item.id)) + 1
-const categories = ref<Category[]>([...MOCK_CATEGORIES])
+let nextId = Math.max(...SEED_CATEGORIES.map(item => item.id)) + 1
+const categories = ref<Category[]>([...SEED_CATEGORIES])
 
 /** 关联商品数：接接口后由服务端返回，删除校验也由服务端兜底 */
 function productCount(id: number) {
-  return MOCK_PRODUCTS.filter(item => item.categoryId === id).length
+  return SEED_PRODUCTS.filter(item => item.categoryId === id).length
 }
 
 const headerStyle = {
@@ -148,7 +148,7 @@ function onDelete(row: Category) {
 
       <div class="table-foot">
         <span class="hint">共 {{ categories.length }} 条 · 有商品在用的分类不可删除</span>
-        <el-button :icon="Refresh" size="small" text bg @click="categories = [...MOCK_CATEGORIES]">
+        <el-button :icon="Refresh" size="small" text bg @click="categories = [...SEED_CATEGORIES]">
           重置演示数据
         </el-button>
       </div>

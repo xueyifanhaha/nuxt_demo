@@ -4,7 +4,8 @@ import { ElMessage } from 'element-plus'
 import { CollectionTag, Goods, Lock, SwitchButton, Tickets } from '@element-plus/icons-vue'
 import { ADMIN_NAV } from '#shared/permissions'
 
-const { role, can, previewLevel } = usePermission()
+const { role, can } = usePermission()
+const auth = useAuthStore()
 const route = useRoute()
 
 const iconMap: Record<string, Component> = {
@@ -21,7 +22,21 @@ const currentLabel = computed(
   () => ADMIN_NAV.find(item => route.path.startsWith(item.to))?.label ?? '后台',
 )
 
-const avatarText = computed(() => role.value.key.charAt(0).toUpperCase())
+const avatarText = computed(() => (auth.user?.name ?? '?').charAt(0).toUpperCase())
+
+const loggingOut = ref(false)
+
+async function onLogout() {
+  loggingOut.value = true
+  try {
+    await auth.logout()
+    ElMessage.success('已退出登录')
+    await navigateTo('/login')
+  }
+  finally {
+    loggingOut.value = false
+  }
+}
 </script>
 
 <template>
@@ -55,8 +70,8 @@ const avatarText = computed(() => role.value.key.charAt(0).toUpperCase())
         <div class="user">
           <span class="avatar">{{ avatarText }}</span>
           <span class="user-meta">
-            <b>{{ role.label }}</b>
-            <span>{{ role.level }} 级 · 预览模式</span>
+            <b>{{ auth.user?.name ?? role.label }}</b>
+            <span>{{ role.level }} 级 · {{ role.label }}</span>
           </span>
         </div>
       </div>
@@ -67,19 +82,8 @@ const avatarText = computed(() => role.value.key.charAt(0).toUpperCase())
         <div class="crumb">后台管理 <i>/</i> <b>{{ currentLabel }}</b></div>
 
         <div class="tools">
-          <span class="preview-label">预览角色</span>
-          <div class="seg">
-            <button
-              v-for="level in [1, 2, 3]"
-              :key="level"
-              type="button"
-              :class="{ on: previewLevel === level }"
-              @click="previewLevel = level"
-            >
-              {{ level }}
-            </button>
-          </div>
-          <el-button text :icon="SwitchButton" @click="ElMessage.info('接入登录后可用')">
+          <span class="whoami">{{ auth.user?.username }}</span>
+          <el-button text :icon="SwitchButton" :loading="loggingOut" @click="onLogout">
             退出
           </el-button>
         </div>
@@ -249,39 +253,10 @@ const avatarText = computed(() => role.value.key.charAt(0).toUpperCase())
   gap: 10px;
 }
 
-.preview-label {
-  font-size: 12px;
-  color: #9ca3af;
-}
-
-.seg {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  background: #f1f3f7;
-  border-radius: 8px;
-}
-
-.seg button {
-  width: 26px;
-  height: 24px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  font-family: inherit;
-  font-size: 12px;
+.whoami {
+  font-size: 12.5px;
   color: #6b7280;
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    color 0.15s;
-}
-
-.seg button.on {
-  background: #ffffff;
-  color: var(--el-color-primary);
-  font-weight: 500;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.14);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .content {

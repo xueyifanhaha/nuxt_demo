@@ -19,15 +19,15 @@ const demoAccounts: DemoAccount[] = [
   { username: 'viewer', role: '3 级 · 只读', level: 3 },
 ]
 
-const features = ['商品与分类维护', '库存、价格与上下架', '角色级权限与操作日志']
-
 const formRef = ref<FormInstance>()
 const loading = ref(false)
+const auth = useAuthStore()
+const route = useRoute()
 
 // 静态阶段先预填一个账号，方便直接看到校验效果
 const form = reactive({
   username: 'admin',
-  password: '123456',
+  password: 'demo-123456',
   remember: true,
 })
 
@@ -44,7 +44,7 @@ const rules: FormRules = {
 
 function fill(username: string) {
   form.username = username
-  form.password = '123456'
+  form.password = 'demo-123456'
   formRef.value?.clearValidate()
 }
 
@@ -55,47 +55,28 @@ async function submit() {
   if (!valid) return
 
   loading.value = true
-  // 静态页面：等下一步接上 /api/auth/login 后替换成真实请求
-  setTimeout(() => {
+  try {
+    const user = await auth.login(form.username, form.password)
+    ElMessage.success(`欢迎回来，${user.name}`)
+    // 登录前被守卫拦下的页面，登录后直接送回去
+    await navigateTo((route.query.redirect as string) || '/products')
+  }
+  catch (error: unknown) {
+    const message
+      = error instanceof Error && 'data' in error
+        ? (error as { data?: { message?: string } }).data?.message
+        : undefined
+    ElMessage.error(message ?? '登录失败，请稍后重试')
+  }
+  finally {
     loading.value = false
-    ElMessage.success(`校验通过（${form.username}），登录接口下一步接入`)
-  }, 350)
+  }
 }
 </script>
 
 <template>
   <div class="login">
-    <section class="panel">
-      <div class="brand">
-        <span class="mark">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 8.5 12 4l9 4.5-9 4.5-9-4.5Z" />
-            <path d="M3 8.5v7L12 20l9-4.5v-7" />
-            <path d="M12 13v7" />
-          </svg>
-        </span>
-        <span class="brand-name">商品运营后台</span>
-      </div>
-
-      <h1>商品、库存、权限<br />一个后台管完</h1>
-      <p class="desc">基于 Nuxt 4 + Vue 3 的练手项目，三层角色权限贯穿页面与接口。</p>
-
-      <ul class="features">
-        <li v-for="item in features" :key="item">
-          <span class="tick">
-            <svg viewBox="0 0 12 12" fill="none" stroke="#7ba7ff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2.5 6.2 4.8 8.4 9.5 3.6" />
-            </svg>
-          </span>
-          {{ item }}
-        </li>
-      </ul>
-
-      <p class="foot">演示账号：admin / editor / viewer<br />密码均为 123456</p>
-    </section>
-
     <section class="form-side">
-      <h2>登录</h2>
       <p class="sub">登录后按角色展示可用的功能与按钮</p>
 
       <el-form
@@ -158,9 +139,7 @@ async function submit() {
 <style scoped>
 .login {
   width: 100%;
-  max-width: 940px;
-  display: grid;
-  grid-template-columns: 0.92fr 1fr;
+  max-width: 440px;
   background: var(--app-surface);
   border: 1px solid rgba(15, 23, 42, 0.06);
   border-radius: 20px;
@@ -170,119 +149,41 @@ async function submit() {
     0 2px 10px rgba(15, 23, 42, 0.04);
 }
 
-/* ---------- 左侧品牌区 ---------- */
-.panel {
-  position: relative;
+/* ---------- 表单区 ---------- */
+.form-side {
   display: flex;
   flex-direction: column;
   padding: 44px 40px 36px;
-  background: #0f1b2e;
-  color: #e2e8f0;
-  overflow: hidden;
 }
 
-.panel::after {
-  content: '';
-  position: absolute;
-  inset: -40% 40% 40% -30%;
-  background: radial-gradient(closest-side, rgba(37, 99, 235, 0.45), rgba(37, 99, 235, 0));
-  pointer-events: none;
+.login-head {
+  text-align: center;
 }
 
-.panel > * {
-  position: relative;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.mark {
-  width: 34px;
-  height: 34px;
+.login-head .mark {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #2563eb;
   box-shadow: 0 6px 16px -6px rgba(37, 99, 235, 0.9);
 }
 
-.brand-name {
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  color: #ffffff;
-}
-
-h1 {
-  margin-top: 38px;
-  font-size: 25px;
-  font-weight: 500;
-  line-height: 1.45;
-  letter-spacing: -0.01em;
-  color: #ffffff;
-}
-
-.desc {
-  margin-top: 14px;
-  font-size: 13.5px;
-  line-height: 1.7;
-  color: #93a4bd;
-}
-
-.features {
-  margin-top: 30px;
-  display: grid;
-  gap: 12px;
-}
-
-.features li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13.5px;
-  color: #c9d5e5;
-}
-
-.tick {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: rgba(37, 99, 235, 0.18);
-  border: 1px solid rgba(96, 150, 255, 0.45);
-}
-
-.foot {
-  margin-top: auto;
-  padding-top: 32px;
-  font-size: 12px;
-  line-height: 1.8;
-  color: #64748b;
-}
-
-/* ---------- 右侧表单区 ---------- */
-.form-side {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 52px 48px;
-}
-
 h2 {
+  margin-top: 16px;
   font-size: 22px;
   font-weight: 500;
   letter-spacing: -0.01em;
+  text-align: center;
 }
 
 .sub {
   margin-top: 6px;
   font-size: 13.5px;
   color: var(--app-muted);
+  text-align: center;
 }
 
 .el-form {
@@ -366,12 +267,7 @@ h2 {
 
 @media (max-width: 880px) {
   .login {
-    grid-template-columns: 1fr;
     max-width: 420px;
-  }
-
-  .panel {
-    display: none;
   }
 
   .form-side {

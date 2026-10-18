@@ -5,6 +5,14 @@
 
 export type ProductStatus = 'on' | 'off'
 
+/** 登录后暴露给前端的用户信息（不含密码哈希） */
+export interface AuthUser {
+  id: number
+  username: string
+  name: string
+  roleLevel: number
+}
+
 export interface Category {
   id: number
   name: string

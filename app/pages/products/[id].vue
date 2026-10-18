@@ -4,7 +4,7 @@ import { ArrowLeft } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { PERM } from '#shared/permissions'
 import type { ProductStatus } from '#shared/types'
-import { MOCK_CATEGORIES, MOCK_PRODUCTS } from '~/utils/mock'
+import { SEED_CATEGORIES, SEED_PRODUCTS } from '#shared/seed'
 
 definePageMeta({ layout: 'default' })
 useHead({ title: '商品编辑 · 商品运营后台' })
@@ -13,7 +13,7 @@ const route = useRoute()
 const id = route.params.id as string
 
 /* 静态阶段从 mock 数据里找；接接口后换成 GET /api/products/:id */
-const product = MOCK_PRODUCTS.find(item => String(item.id) === id)
+const product = SEED_PRODUCTS.find(item => String(item.id) === id)
 
 // 找不到直接抛给 error.vue，顺便演示 404 链路
 if (!product) {
@@ -72,7 +72,7 @@ function resetForm() {
 }
 
 const categoryName = computed(
-  () => MOCK_CATEGORIES.find(item => item.id === form.categoryId)?.name ?? '—',
+  () => SEED_CATEGORIES.find(item => item.id === form.categoryId)?.name ?? '—',
 )
 </script>
 
@@ -131,7 +131,7 @@ const categoryName = computed(
             <el-form-item label="商品分类" prop="categoryId">
               <el-select v-model="form.categoryId" placeholder="请选择分类" class="w-full">
                 <el-option
-                  v-for="item in MOCK_CATEGORIES"
+                  v-for="item in SEED_CATEGORIES"
                   :key="item.id"
                   :label="item.name"
                   :value="item.id"
