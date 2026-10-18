@@ -65,10 +65,10 @@ export interface AdminNavItem {
 
 /** 侧边栏菜单：按权限过滤后渲染，所以 2/3 级看不到日志与权限管理 */
 export const ADMIN_NAV: AdminNavItem[] = [
-  { to: '/admin/products', label: '商品管理', icon: 'goods', permission: PERM.PRODUCT_VIEW },
-  { to: '/admin/categories', label: '分类管理', icon: 'tag', permission: PERM.CATEGORY_VIEW },
-  { to: '/admin/logs', label: '操作日志', icon: 'log', permission: PERM.LOG_VIEW },
-  { to: '/admin/roles', label: '权限管理', icon: 'shield', permission: PERM.ROLE_MANAGE },
+  { to: '/products', label: '商品管理', icon: 'goods', permission: PERM.PRODUCT_VIEW },
+  { to: '/categories', label: '分类管理', icon: 'tag', permission: PERM.CATEGORY_VIEW },
+  { to: '/logs', label: '操作日志', icon: 'log', permission: PERM.LOG_VIEW },
+  { to: '/roles', label: '权限管理', icon: 'shield', permission: PERM.ROLE_MANAGE },
 ]
 
 /** 权限管理页用的分组展示 */
