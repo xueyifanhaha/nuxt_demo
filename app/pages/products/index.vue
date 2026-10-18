@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { PERM } from '#shared/permissions'
-import type { Product } from '#shared/types'
+import type { Product, ProductStatus } from '#shared/types'
 import { MOCK_CATEGORIES, MOCK_PRODUCTS } from '~/utils/mock'
 
 definePageMeta({ layout: 'default' })
@@ -12,7 +12,8 @@ const { can, role } = usePermission()
 
 /* ---------- 静态数据：服务端接口接入后替换 ---------- */
 const CATEGORIES = MOCK_CATEGORIES
-const PRODUCTS = MOCK_PRODUCTS
+/** 本地可变副本：上下架、删除直接改这里，接口阶段换成对应请求 */
+const products = ref([...MOCK_PRODUCTS])
 
 /* ---------- 筛选与分页（暂时在本地算，接接口后改成 query 参数） ---------- */
 const filters = reactive<{
@@ -25,12 +26,20 @@ const filters = reactive<{
   q: '',
 })
 
+/** 关键词草稿：点「搜索」或回车才应用到 filters.q */
+const draftQ = ref('')
+
+function applySearch() {
+  filters.q = draftQ.value.trim()
+  page.value = 1
+}
+
 const page = ref(1)
 const pageSize = ref(8)
 
 const filtered = computed(() => {
   const keyword = filters.q.trim().toLowerCase()
-  return PRODUCTS.filter((item) => {
+  return products.value.filter((item) => {
     if (filters.categoryId && item.categoryId !== filters.categoryId) return false
     if (filters.status && item.status !== filters.status) return false
     if (keyword && !`${item.name} ${item.sku}`.toLowerCase().includes(keyword)) return false
@@ -58,6 +67,7 @@ function resetFilters() {
   filters.categoryId = undefined
   filters.status = undefined
   filters.q = ''
+  draftQ.value = ''
   page.value = 1
 }
 
@@ -93,8 +103,31 @@ function onEdit(row: Product) {
   navigateTo(`/products/${row.id}`)
 }
 
-function onToggleStatus(row: Product) {
-  ElMessage.info(`${row.status === 'on' ? '下架' : '上架'}「${row.name}」：接口下一步接`)
+/* ---------- 上下架：列表内直接切换（权限 product:status） ---------- */
+const switchingId = ref<number | null>(null)
+
+function onToggleStatus(row: Product, value: ProductStatus) {
+  switchingId.value = row.id
+  // 假请求：接口阶段换成 PUT /api/products/:id/status
+  setTimeout(() => {
+    row.status = value
+    switchingId.value = null
+    ElMessage.success(`「${row.name}」已${value === 'on' ? '上架' : '下架'}`)
+  }, 300)
+}
+
+function onDelete(row: Product) {
+  ElMessageBox.confirm(`确定删除商品「${row.name}」吗？删除后不可恢复。`, '删除确认', {
+    type: 'warning',
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+  })
+    .then(() => {
+      // 假删除：接口阶段换成 DELETE /api/products/:id
+      products.value = products.value.filter(item => item.id !== row.id)
+      ElMessage.success(`已删除「${row.name}」`)
+    })
+    .catch(() => {})
 }
 </script>
 
@@ -113,24 +146,31 @@ function onToggleStatus(row: Product) {
     </div>
 
     <section class="card filter">
-      <el-select v-model="filters.categoryId" placeholder="全部分类" clearable class="w-150">
-        <el-option v-for="item in CATEGORIES" :key="item.id" :label="item.name" :value="item.id" />
-      </el-select>
+      <div class="filter-left">
+        <el-select v-model="filters.categoryId" placeholder="全部分类" clearable class="w-150">
+          <el-option v-for="item in CATEGORIES" :key="item.id" :label="item.name" :value="item.id" />
+        </el-select>
 
-      <el-select v-model="filters.status" placeholder="全部状态" clearable class="w-130">
-        <el-option label="已上架" value="on" />
-        <el-option label="已下架" value="off" />
-      </el-select>
+        <el-select v-model="filters.status" placeholder="全部状态" clearable class="w-130">
+          <el-option label="已上架" value="on" />
+          <el-option label="已下架" value="off" />
+        </el-select>
 
-      <el-input
-        v-model="filters.q"
-        placeholder="搜索商品名称或 SKU"
-        :prefix-icon="Search"
-        clearable
-        class="grow"
-      />
+        <el-input
+          v-model="draftQ"
+          placeholder="搜索名称或 SKU"
+          :prefix-icon="Search"
+          clearable
+          class="w-200"
+          @keyup.enter="applySearch"
+          @clear="applySearch"
+        />
+      </div>
 
-      <el-button :icon="Refresh" @click="resetFilters">重置</el-button>
+      <div class="filter-right">
+        <el-button type="primary" :icon="Search" @click="applySearch">搜索</el-button>
+        <el-button :icon="Refresh" @click="resetFilters">重置</el-button>
+      </div>
     </section>
 
     <section class="card table-card">
@@ -162,9 +202,22 @@ function onToggleStatus(row: Product) {
           </template>
         </el-table-column>
 
-        <el-table-column label="状态" width="96">
+        <el-table-column label="状态" width="110">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'on' ? 'success' : 'info'" size="small" effect="light">
+            <!-- 有 product:status 权限：列表内直接切换；否则只读标签 -->
+            <el-switch
+              v-if="can(PERM.PRODUCT_STATUS)"
+              :model-value="row.status"
+              active-value="on"
+              inactive-value="off"
+              inline-prompt
+              active-text="上架"
+              inactive-text="下架"
+              class="status-switch"
+              :loading="switchingId === row.id"
+              @change="(value: ProductStatus) => onToggleStatus(row, value)"
+            />
+            <el-tag v-else :type="row.status === 'on' ? 'success' : 'info'" size="small" effect="light">
               {{ row.status === 'on' ? '已上架' : '已下架' }}
             </el-tag>
           </template>
@@ -173,23 +226,14 @@ function onToggleStatus(row: Product) {
         <el-table-column label="更新时间" width="150" prop="updatedAt" />
 
         <el-table-column
-          v-if="can(PERM.PRODUCT_EDIT) || can(PERM.PRODUCT_STATUS)"
+          v-if="can(PERM.PRODUCT_EDIT)"
           label="操作"
-          width="140"
+          width="130"
           fixed="right"
         >
           <template #default="{ row }">
-            <el-button v-if="can(PERM.PRODUCT_EDIT)" link type="primary" @click="onEdit(row)">
-              编辑
-            </el-button>
-            <el-button
-              v-if="can(PERM.PRODUCT_STATUS)"
-              link
-              :type="row.status === 'on' ? 'warning' : 'success'"
-              @click="onToggleStatus(row)"
-            >
-              {{ row.status === 'on' ? '下架' : '上架' }}
-            </el-button>
+            <el-button link type="primary" @click="onEdit(row)">编辑</el-button>
+            <el-button link type="danger" @click="onDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -239,9 +283,19 @@ function onToggleStatus(row: Product) {
 .filter {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
   padding: 14px;
   margin-bottom: 14px;
+}
+
+.filter-left,
+.filter-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
 }
 
 .w-150 {
@@ -252,9 +306,12 @@ function onToggleStatus(row: Product) {
   width: 130px;
 }
 
-.grow {
-  flex: 1;
-  min-width: 200px;
+.w-200 {
+  width: 200px;
+}
+
+.status-switch.el-switch {
+  width: 58px;
 }
 
 .table-card {

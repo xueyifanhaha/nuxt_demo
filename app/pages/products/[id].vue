@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Plus } from '@element-plus/icons-vue'
-import type { FormInstance, FormRules, UploadFile, UploadUserFile } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import { PERM } from '#shared/permissions'
 import type { ProductStatus } from '#shared/types'
 import { MOCK_CATEGORIES, MOCK_PRODUCTS } from '~/utils/mock'
@@ -36,12 +36,6 @@ const form = reactive({
   description: product.description,
 })
 
-const MAX_IMAGES = 5
-const fileList = ref<UploadUserFile[]>(
-  product.images.map((url, index) => ({ name: `image-${index + 1}`, url, status: 'success' })),
-)
-const urlInput = ref('')
-
 const rules: FormRules = {
   name: [
     { required: true, message: '请输入商品名称', trigger: 'blur' },
@@ -50,53 +44,6 @@ const rules: FormRules = {
   categoryId: [{ required: true, message: '请选择商品分类', trigger: 'change' }],
   price: [{ required: true, message: '请填写单价', trigger: 'blur' }],
   stock: [{ required: true, message: '请填写库存', trigger: 'blur' }],
-}
-
-/* ---------- 图片 ---------- */
-function onFileChange(file: UploadFile) {
-  const raw = file.raw
-  if (!raw) return
-
-  if (!raw.type.startsWith('image/')) {
-    fileList.value.pop()
-    ElMessage.error('只能上传图片文件')
-    return
-  }
-
-  if (raw.size > 200 * 1024) {
-    fileList.value.pop()
-    ElMessage.error('单张图片不能超过 200KB')
-    return
-  }
-
-  // 本地读取为 base64，接口阶段改为 multipart 上传、返回 URL
-  const reader = new FileReader()
-  reader.onload = () => {
-    file.url = String(reader.result)
-  }
-  reader.readAsDataURL(raw)
-}
-
-function onExceed() {
-  ElMessage.warning(`最多上传 ${MAX_IMAGES} 张图片，第一张将作为主图`)
-}
-
-function addImageUrl() {
-  const url = urlInput.value.trim()
-  if (!url) return
-
-  if (!/^https?:\/\//.test(url)) {
-    ElMessage.error('请输入以 http(s):// 开头的图片地址')
-    return
-  }
-
-  if (fileList.value.length >= MAX_IMAGES) {
-    ElMessage.warning(`最多 ${MAX_IMAGES} 张图片`)
-    return
-  }
-
-  fileList.value.push({ name: `link-${Date.now()}`, url })
-  urlInput.value = ''
 }
 
 /* ---------- 保存 / 重置 ---------- */
@@ -110,7 +57,7 @@ async function save() {
   // 静态页面：接口接入后替换为 PUT /api/products/:id
   setTimeout(() => {
     saving.value = false
-    ElMessage.success(`校验通过（${fileList.value.length} 张图片），保存接口下一步接入`)
+    ElMessage.success('校验通过，保存接口下一步接入')
   }, 400)
 }
 
@@ -121,11 +68,6 @@ function resetForm() {
   form.stock = product!.stock
   form.status = product!.status
   form.description = product!.description
-  fileList.value = product!.images.map((url, index) => ({
-    name: `image-${index + 1}`,
-    url,
-    status: 'success',
-  }))
   formRef.value?.clearValidate()
 }
 
@@ -199,30 +141,6 @@ const categoryName = computed(
           </section>
 
           <section class="card">
-            <h2>商品图片</h2>
-            <p class="hint">
-              最多 {{ MAX_IMAGES }} 张，第一张为主图；支持本地上传（≤200KB）或粘贴图片链接
-            </p>
-            <el-upload
-              v-model:file-list="fileList"
-              action="#"
-              list-type="picture-card"
-              :auto-upload="false"
-              :limit="MAX_IMAGES"
-              :on-change="onFileChange"
-              :on-exceed="onExceed"
-              accept="image/*"
-            >
-              <el-icon :size="20"><Plus /></el-icon>
-            </el-upload>
-
-            <div class="url-row">
-              <el-input v-model="urlInput" placeholder="https://example.com/image.jpg" clearable />
-              <el-button @click="addImageUrl">添加链接</el-button>
-            </div>
-          </section>
-
-          <section class="card">
             <h2>商品描述</h2>
             <el-form-item prop="description">
               <el-input
@@ -265,18 +183,6 @@ const categoryName = computed(
             <p class="hint" :class="{ warn: form.stock < 20 }">
               {{ form.stock < 20 ? '库存低于 20，列表页会标红提醒' : '库存充足' }}
             </p>
-          </section>
-
-          <section class="card">
-            <h2>上架状态</h2>
-            <el-switch
-              v-model="form.status"
-              active-value="on"
-              inactive-value="off"
-              active-text="上架"
-              inactive-text="下架"
-            />
-            <p class="hint">下架后买家端不可见，列表页仍会保留记录</p>
           </section>
 
           <section class="card">
@@ -401,16 +307,6 @@ const categoryName = computed(
   width: 100%;
 }
 
-.url-row {
-  display: flex;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.url-row .el-input {
-  max-width: 420px;
-}
-
 .meta-row {
   display: flex;
   align-items: center;
@@ -432,14 +328,6 @@ const categoryName = computed(
   font-weight: 500;
   color: var(--app-text);
   font-variant-numeric: tabular-nums;
-}
-
-:deep(.el-upload--picture-card) {
-  --el-upload-picture-card-size: 96px;
-}
-
-:deep(.el-upload-list--picture-card .el-upload-list__item) {
-  --el-upload-picture-card-size: 96px;
 }
 
 @media (max-width: 1100px) {

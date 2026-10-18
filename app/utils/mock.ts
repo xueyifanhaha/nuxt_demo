@@ -1,10 +1,4 @@
-import type { Category, Product } from '#shared/types'
-
-/** 本地占位图：离线可用的 SVG data URI，接口阶段换成真实图片 */
-export function placeholderImage(label: string, bg: string) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="${bg}"/><text x="200" y="152" font-family="sans-serif" font-size="22" fill="#475569" text-anchor="middle">${label}</text></svg>`
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
-}
+import type { Category, LogEntry, Product } from '#shared/types'
 
 export const MOCK_CATEGORIES: Category[] = [
   { id: 1, name: '手机数码', description: '手机、耳机、电脑配件', createdAt: '2026-08-01 09:00' },
@@ -22,7 +16,6 @@ export const MOCK_PRODUCTS: Product[] = [
     price: 8999,
     stock: 42,
     status: 'on',
-    images: [placeholderImage('iPhone 15 Pro', '#eef3fe'), placeholderImage('细节图', '#dbe7fd')],
     description: 'A17 Pro 芯片，钛金属边框，支持 USB-C。原装国行，全国联保一年。',
     createdAt: '2026-09-02 10:24',
     updatedAt: '2026-10-18 21:35',
@@ -36,7 +29,6 @@ export const MOCK_PRODUCTS: Product[] = [
     price: 6499,
     stock: 8,
     status: 'on',
-    images: [placeholderImage('小米 14 Ultra', '#eef3fe')],
     description: '徕卡光学全焦段四摄，2K 屏，90W 有线快充。库存紧张，补货中。',
     createdAt: '2026-09-05 14:12',
     updatedAt: '2026-10-18 20:12',
@@ -50,7 +42,6 @@ export const MOCK_PRODUCTS: Product[] = [
     price: 1899,
     stock: 120,
     status: 'on',
-    images: [placeholderImage('AirPods Pro 2', '#eef3fe')],
     description: '自适应通透模式，主动降噪，USB-C 充电盒。',
     createdAt: '2026-09-06 11:30',
     updatedAt: '2026-10-17 18:40',
@@ -64,7 +55,6 @@ export const MOCK_PRODUCTS: Product[] = [
     price: 2699,
     stock: 15,
     status: 'off',
-    images: [placeholderImage('WH-1000XM5', '#eef3fe')],
     description: '行业标杆级降噪，30 小时续航。已下架，等待新批次。',
     createdAt: '2026-09-08 16:45',
     updatedAt: '2026-10-17 11:08',
@@ -78,7 +68,6 @@ export const MOCK_PRODUCTS: Product[] = [
     price: 3699,
     stock: 26,
     status: 'on',
-    images: [placeholderImage('戴森 V12', '#f1f0fe'), placeholderImage('配件全家福', '#e4e0fb')],
     description: '150AW 吸力，激光探尘，整机过滤，60 分钟续航。',
     createdAt: '2026-09-10 09:18',
     updatedAt: '2026-10-16 15:22',
@@ -92,7 +81,6 @@ export const MOCK_PRODUCTS: Product[] = [
     price: 2899,
     stock: 5,
     status: 'on',
-    images: [placeholderImage('变频空调', '#f1f0fe')],
     description: '新一级能效，智能自清洁，含基础安装。库存告急，优先补货。',
     createdAt: '2026-09-12 13:40',
     updatedAt: '2026-10-16 09:50',
@@ -106,7 +94,6 @@ export const MOCK_PRODUCTS: Product[] = [
     price: 899,
     stock: 64,
     status: 'off',
-    images: [placeholderImage('破壁机', '#f1f0fe')],
     description: '1.75L 大容量，八叶精钢刀片，12 大功能菜单。季节性下架。',
     createdAt: '2026-09-15 15:26',
     updatedAt: '2026-10-15 16:31',
@@ -120,7 +107,6 @@ export const MOCK_PRODUCTS: Product[] = [
     price: 599,
     stock: 210,
     status: 'on',
-    images: [placeholderImage('轻型羽绒服', '#eaf6f0')],
     description: '90% 白鸭绒填充，便携收纳袋，四个颜色可选。',
     createdAt: '2026-09-18 10:08',
     updatedAt: '2026-10-15 10:04',
@@ -134,7 +120,6 @@ export const MOCK_PRODUCTS: Product[] = [
     price: 1099,
     stock: 33,
     status: 'on',
-    images: [placeholderImage('Air Zoom', '#eaf6f0'), placeholderImage('鞋底细节', '#d8efe4')],
     description: 'ZoomX 缓震中底，回弹出色，适合日常慢跑与长距离训练。',
     createdAt: '2026-09-20 17:33',
     updatedAt: '2026-10-14 19:26',
@@ -148,7 +133,6 @@ export const MOCK_PRODUCTS: Product[] = [
     price: 799,
     stock: 0,
     status: 'off',
-    images: [placeholderImage('商务双肩包', '#eaf6f0')],
     description: '17 英寸电脑仓，防泼水面料，背垫透气。缺货下架中。',
     createdAt: '2026-09-22 12:15',
     updatedAt: '2026-10-14 14:19',
@@ -162,7 +146,6 @@ export const MOCK_PRODUCTS: Product[] = [
     price: 129,
     stock: 480,
     status: 'on',
-    images: [placeholderImage('坚果礼盒', '#fdf3e7')],
     description: '8 袋混合装，每日坚果搭配，送礼自用皆宜，保质期 8 个月。',
     createdAt: '2026-09-25 09:52',
     updatedAt: '2026-10-13 20:45',
@@ -176,10 +159,26 @@ export const MOCK_PRODUCTS: Product[] = [
     price: 399,
     stock: 12,
     status: 'on',
-    images: [placeholderImage('大闸蟹礼券', '#fdf3e7')],
     description: '公 4 两 / 母 3 两，共 4 对，顺丰冷链包邮，死蟹包赔。',
     createdAt: '2026-09-28 08:36',
     updatedAt: '2026-10-13 09:12',
     updatedBy: 'admin',
   },
+]
+
+export const MOCK_LOGS: LogEntry[] = [
+  { id: 3001, at: '2026-10-18 21:35', actorId: 1, actorName: 'admin', actorRole: '1 级 · 管理员', action: 'product:update', targetType: '商品', targetId: 101, targetName: 'iPhone 15 Pro 256G', detail: '价格 9299 → 8999' },
+  { id: 3002, at: '2026-10-18 20:12', actorId: 2, actorName: 'editor', actorRole: '2 级 · 运营', action: 'product:update', targetType: '商品', targetId: 102, targetName: '小米 14 Ultra 16G+512G', detail: '库存 12 → 8' },
+  { id: 3003, at: '2026-10-18 16:47', actorId: 2, actorName: 'editor', actorRole: '2 级 · 运营', action: 'product:status', targetType: '商品', targetId: 104, targetName: '索尼 WH-1000XM5 头戴耳机', detail: '上架 → 下架' },
+  { id: 3004, at: '2026-10-18 14:03', actorId: 1, actorName: 'admin', actorRole: '1 级 · 管理员', action: 'category:create', targetType: '分类', targetId: 4, targetName: '食品生鲜', detail: '新建分类' },
+  { id: 3005, at: '2026-10-18 10:26', actorId: 2, actorName: 'editor', actorRole: '2 级 · 运营', action: 'product:update', targetType: '商品', targetId: 106, targetName: '美的 变频空调 1.5 匹', detail: '库存 30 → 5，价格 2999 → 2899' },
+  { id: 3006, at: '2026-10-17 18:40', actorId: 2, actorName: 'editor', actorRole: '2 级 · 运营', action: 'product:update', targetType: '商品', targetId: 103, targetName: 'AirPods Pro 2 无线耳机', detail: '更新商品描述' },
+  { id: 3007, at: '2026-10-17 11:08', actorId: 1, actorName: 'admin', actorRole: '1 级 · 管理员', action: 'login', targetType: '系统', targetId: 1, targetName: 'admin', detail: '登录成功' },
+  { id: 3008, at: '2026-10-17 09:55', actorId: 3, actorName: 'viewer', actorRole: '3 级 · 只读', action: 'login', targetType: '系统', targetId: 3, targetName: 'viewer', detail: '登录成功' },
+  { id: 3009, at: '2026-10-16 15:22', actorId: 2, actorName: 'editor', actorRole: '2 级 · 运营', action: 'product:update', targetType: '商品', targetId: 105, targetName: '戴森 V12 无线吸尘器', detail: '库存 18 → 26' },
+  { id: 3010, at: '2026-10-16 10:31', actorId: 1, actorName: 'admin', actorRole: '1 级 · 管理员', action: 'role:update', targetType: '角色', targetId: 2, targetName: '运营（2 级）', detail: '权限变更：+category:edit' },
+  { id: 3011, at: '2026-10-15 16:31', actorId: 2, actorName: 'editor', actorRole: '2 级 · 运营', action: 'product:status', targetType: '商品', targetId: 107, targetName: '九阳 破壁料理机', detail: '上架 → 下架' },
+  { id: 3012, at: '2026-10-15 10:04', actorId: 2, actorName: 'editor', actorRole: '2 级 · 运营', action: 'product:update', targetType: '商品', targetId: 108, targetName: '优衣库 轻型羽绒服', detail: '价格 649 → 599' },
+  { id: 3013, at: '2026-10-14 14:19', actorId: 1, actorName: 'admin', actorRole: '1 级 · 管理员', action: 'product:delete', targetType: '商品', targetId: 999, targetName: '测试商品（已废弃）', detail: '删除商品' },
+  { id: 3014, at: '2026-10-13 09:12', actorId: 1, actorName: 'admin', actorRole: '1 级 · 管理员', action: 'category:update', targetType: '分类', targetId: 2, targetName: '家用电器', detail: '描述更新：大家电与厨房电器' },
 ]

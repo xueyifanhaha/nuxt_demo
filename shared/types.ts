@@ -20,7 +20,6 @@ export interface Product {
   price: number
   stock: number
   status: ProductStatus
-  images: string[]
   description: string
   createdAt: string
   updatedAt: string
