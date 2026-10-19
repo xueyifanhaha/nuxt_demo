@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概览
 
-商品运营后台（Nuxt 4 + Vue 3 + TypeScript + Element Plus + Pinia），中文 UI。当前处于**静态页面阶段**：所有页面数据都是组件内 mock，登录只是表单校验，没有真实 API、没有持久化；`server/` 为空，Nitro 后端尚未开始。
+商品运营后台（Nuxt 4 + Vue 3 + TypeScript + Element Plus + Pinia），中文 UI。认证已接入真实服务端（Nitro 接口 + 签名 cookie 会话 + 全局路由守卫）；商品、分类、日志、角色数据仍是 `shared/seed.ts` 里的种子数据，写操作只在客户端内存中生效，刷新即还原。除认证外尚无写接口，数据库是进程内内存单例，重启即重置。
 
 仓库内的 `.workbuddy/memory/` 记录了此前的需求决策与踩坑（反映写入时的状态，若与代码冲突以代码为准）。
 
@@ -24,14 +24,18 @@ npx nuxt prepare   # postinstall 生成 .nuxt 类型
 
 Nuxt 4，源码目录是 `app/`（不是根目录 `pages/`）。
 
-- **`shared/permissions.ts` — 权限唯一来源。** 定义权限点 `PERM`、三级种子角色 `ROLE_PRESETS`、侧边栏 `ADMIN_NAV`、权限管理页分组 `PERMISSION_GROUPS`。app 侧通过 `#shared/permissions` 导入；`server/` 将来也从这里导入，保证前后端权限定义一致。新增权限点/菜单/角色只改这一个文件。
-- **`app/composables/usePermission.ts` — 权限的唯一消费入口。** 当前权限来源是顶栏「预览角色」开关（`useState('preview-role-level')`，1/2/3 级）。**接入真实登录时只替换这个文件**（改为读用户 store），页面代码应保持不动。暴露 `{ previewLevel, role, permissions, can, canAny }`。
+- **`shared/permissions.ts` — 权限唯一来源。** 定义权限点 `PERM`、三级种子角色 `ROLE_PRESETS`、侧边栏 `ADMIN_NAV`、权限管理页分组 `PERMISSION_GROUPS`。app 与 server 都通过 `#shared/permissions` 导入，新增权限点/菜单/角色只改这一个文件。
+- **`shared/seed.ts` — 种子数据。** 服务端内存库与前端页面共用（页面暂时直接 import，写接口接入后应改为请求服务端）。
+- **`app/stores/auth.ts` — 登录态与当前权限的唯一前端数据源。** Pinia store，但状态底层用 `useState('auth-user' / 'auth-permissions' / 'auth-loaded')` 承载：全局路由守卫在 SSR 首次导航时早于 Pinia 插件执行，中间件里直接调 `useAuthStore()` 会报 "no active Pinia"。store 提供 `login / logout / fetchMe / can / canAny / roleLevel`。
+- **`app/middleware/auth.global.ts` — 页面级那道关。** 冷启动先请求 `/api/auth/me` 恢复会话；未登录访问后台 → `/login?redirect=原地址`；已登录访问 `/login` → 回 `/products`；页面权限不足 → `/403`。路由与权限点映射写在文件底部的 `requiredPerm()`（`/products/:id` 要求 `product:edit`，其余见函数）。**中间件内同样只能用 `useState`，不要调 store。**
+- **`app/composables/usePermission.ts` — 页面里的权限消费入口。** `permissions` / `can` 来自 auth store（服务端下发）；`roles` 是权限管理页的可编辑草稿 state（初值克隆 `ROLE_PRESETS`），保存只改这份本地 state，尚未写回服务端，也不影响当前会话的 `auth.permissions`。暴露 `{ roles, role, permissions, can, canAny }`。
 - 三级权限语义：1 管理员=全部；2 运营=商品+分类可编辑，无操作日志/权限管理；3 只读=只有 `*:view`。导航、按钮、操作列均用 `can(PERM.*)` 控制显隐。
-- **布局**：`default.vue` = 232px 侧边栏（菜单按权限过滤）+ 60px 顶栏（面包屑/预览角色/退出）+ 内容区，admin 页面用它；`auth.vue` = 居中登录外壳，`login.vue` 用；`403.vue` 用 `definePageMeta({ layout: false })`。
+- **服务端认证**：`server/api/auth/{login,logout,me}`；`server/utils/session.ts` 用 HMAC-SHA256 签名的 httpOnly cookie（7 天，`SESSION_SECRET` 缺省为 dev 值）；`server/utils/db.ts` 是挂在 `globalThis` 上的内存单例（scrypt 加盐哈希密码，重启重置）；`server/utils/permission.ts` 提供 `requireUser` / `requirePerm`，是接口层的真正安全边界（401/403）。新增写接口第一行必须调 `requirePerm`。
+- **布局**：`default.vue` = 232px 侧边栏（菜单按权限过滤）+ 60px 顶栏（面包屑/当前用户/退出）+ 内容区；`auth.vue` = 居中登录外壳；`403.vue` 用 `definePageMeta({ layout: false })`。
 - **入口**：`app/app.vue` = `NuxtLayout` + `NuxtPage`；`app/error.vue` 处理 404/500。
-- 路由：`/` 经 `nuxt.config.ts` 的 routeRules 重定向到 `/login`；后台页在 `app/pages/admin/`。`/admin/products/[id]` 的定位是**编辑页**（详情=编辑，不做只读双态），设计上要求 `product:edit` 权限，但路由守卫尚未实现。
+- 路由：页面直接在 `app/pages/` 下，**没有 `/admin` 前缀**：`/products`、`/products/[id]`、`/categories`、`/logs`、`/roles`、`/login`、`/403`。`/` 经 routeRules 重定向到 `/products`。`/products/[id]` 是**编辑页**（详情=编辑，不做只读双态），守卫要求 `product:edit`。
+- **`nuxt.config.ts` 的 `nitro.externals.inline: ['pinia']` 不能删**：否则 Nitro 把 Pinia 外置、`@pinia/nuxt` 插件却内联，两份副本会让生产 SSR 报 "no active Pinia"。
 - **样式**：无 Tailwind。`app/assets/css/main.css` 用 `--app-*` 设计变量并覆盖 Element Plus 的 `--el-color-primary`（#2563eb）等主题变量，各页面用 scoped CSS。新增组件沿用这套变量，不要硬编码主色。
-- Pinia 已安装并注册，但目前没有任何 store；状态暂时只用 `useState` / 组件内 `reactive`。
 
 ## 已定范围与设计约束
 
@@ -39,18 +43,19 @@ Nuxt 4，源码目录是 `app/`（不是根目录 `pages/`）。
 
 - 分类只有**一级**，不做树、不做 `parentId`。
 - 商品状态只有 `'on' | 'off'`；不做草稿/审核/软删除。
-- 只做登录页；不做注册、改密、用户管理，3 个种子账号写死。
-- 图片用 URL 输入或本地转 base64（≤200KB），存 JSON。
-- 操作日志要做（权限点 `log:view` 已就绪）。
-- 权限落点：`product:edit` 同时控制列表编辑按钮、`/admin/products/[id]` 路由、保存接口；上下架用独立的 `product:status`。
-- **安全边界**：前端权限判断只负责体验，真正的拦截必须放在 Nitro 服务端（接口返回 403），不要只靠路由守卫。
+- 只做登录页；不做注册、改密、用户管理，3 个种子账号写死（`admin` / `editor` / `viewer`，密码 `demo-123456`，密码哈希在服务端种子时生成）。
+- 商品图片功能已移除，`Product` 类型不再有 `images` 字段；不要重新引入。
+- 操作日志要做（权限点 `log:view` 已就绪）；目前只有登录成功会由服务端写日志。
+- 权限落点：`product:edit` 同时控制列表编辑按钮、`/products/[id]` 路由、保存接口；上下架用独立的 `product:status`。
+- **安全边界**：前端权限判断只负责体验，真正的拦截放在 Nitro 服务端（`requirePerm` 返回 403），不要只靠路由守卫。
 
 ## 当前实现状态
 
-- `login.vue`：静态校验，账号 admin/editor/viewer 密码 demo-123456，提交只弹提示；`/api/auth/login` 未实现。
-- `admin/products/index.vue`：唯一有完整内容的页面，12 条 mock 商品、本地筛选/搜索/分页；编辑、上下架、新建按钮都只弹占位提示。
-- `admin/categories.vue`、`logs.vue`、`roles.vue`、`products/[id].vue`：只有 `<h1>` 占位。
-- 已有页面结构与交互范式（卡片、分页、表格、权限过滤）应作为后续页面的模板。
+- **认证已闭环**：`login.vue` 调真实 `/api/auth/login`，成功后按 `redirect` 回跳；`/api/auth/me` 支持刷新恢复；`/api/auth/logout` 清 cookie；全局守卫负责跳转与页面权限。
+- `products/index.vue`、`products/[id].vue`、`categories.vue`、`logs.vue`、`roles.vue`：UI 已完整（筛选/分页/弹窗/权限矩阵），但数据来自 `shared/seed.ts`，编辑、上下架、删除、保存等写操作只改客户端内存，刷新还原。
+- `roles.vue` 的权限矩阵保存后只更新 `usePermission().roles` 本地 state，**不会**改变服务端角色或当前登录会话的权限。
+- 尚未实现：商品/分类/日志/角色的服务端写接口与持久化；页面仍在直接 import 种子数据。新增接口时按 `requirePerm` + `db.appendLog` 的既有模式写。
+- 已有页面结构（卡片、表格、弹窗、权限过滤、`headerStyle`）应作为后续页面的模板。
 
 ## 本机环境坑
 
