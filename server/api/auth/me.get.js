@@ -1,5 +1,5 @@
-import { db } from '../../utils/db'
-import { requireUser } from '../../utils/permission'
+import { db } from '../../utils/db.js'
+import { requireUser } from '../../utils/permission.js'
 
 export default defineEventHandler((event) => {
   const user = requireUser(event)

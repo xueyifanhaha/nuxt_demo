@@ -1,7 +1,4 @@
-import type { H3Event } from 'h3'
 import { createError } from 'h3'
-import type { Permission } from '#shared/permissions'
-import type { AuthUser } from '#shared/types'
 import { db } from './db'
 import { getSessionUser } from './session'
 
@@ -11,7 +8,7 @@ import { getSessionUser } from './session'
  * 前端藏按钮只是体验，这里才是真正的安全边界。
  */
 
-export function requireUser(event: H3Event): AuthUser {
+export function requireUser(event) {
   const user = getSessionUser(event)
   if (!user) {
     throw createError({
@@ -23,7 +20,7 @@ export function requireUser(event: H3Event): AuthUser {
   return user
 }
 
-export function requirePerm(event: H3Event, perm: Permission): AuthUser {
+export function requirePerm(event, perm) {
   const user = requireUser(event)
   const role = db.getRole(user.roleLevel)
 

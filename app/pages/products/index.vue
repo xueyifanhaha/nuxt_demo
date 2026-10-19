@@ -1,26 +1,27 @@
-<script setup lang="ts">
+<script setup>
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { PERM } from '#shared/permissions'
-import type { Product, ProductStatus } from '#shared/types'
-import { SEED_CATEGORIES, SEED_PRODUCTS } from '#shared/seed'
+import { SEED_PRODUCTS } from '#shared/seed'
 
 definePageMeta({ layout: 'default' })
 useHead({ title: '商品管理 · 商品运营后台' })
 
 const { can, role } = usePermission()
 
-/* ---------- 静态数据：服务端接口接入后替换 ---------- */
-const CATEGORIES = SEED_CATEGORIES
+/* 分类读服务端：新建的分类立刻能在这里筛到（商品数据下一步接接口） */
+const requestFetch = useRequestFetch()
+const { data: categoryData } = await useAsyncData(
+  'categories-for-products',
+  () => requestFetch('/api/categories'),
+)
+const CATEGORIES = computed(() => categoryData.value?.items ?? [])
+
 /** 本地可变副本：上下架、删除直接改这里，接口阶段换成对应请求 */
 const products = ref([...SEED_PRODUCTS])
 
 /* ---------- 筛选与分页（暂时在本地算，接接口后改成 query 参数） ---------- */
-const filters = reactive<{
-  categoryId?: number
-  status?: 'on' | 'off'
-  q: string
-}>({
+const filters = reactive({
   categoryId: undefined,
   status: undefined,
   q: '',
@@ -39,8 +40,13 @@ const pageSize = ref(8)
 
 const filtered = computed(() => {
   const keyword = filters.q.trim().toLowerCase()
+  // 未分类 id 是 0，清空下拉可能是 ''/undefined/null，统一按「没有筛选条件」处理
+  const hasCategory = filters.categoryId !== undefined
+    && filters.categoryId !== null
+    && filters.categoryId !== ''
+
   return products.value.filter((item) => {
-    if (filters.categoryId && item.categoryId !== filters.categoryId) return false
+    if (hasCategory && item.categoryId !== filters.categoryId) return false
     if (filters.status && item.status !== filters.status) return false
     if (keyword && !`${item.name} ${item.sku}`.toLowerCase().includes(keyword)) return false
     return true
@@ -79,16 +85,16 @@ const headerStyle = {
   fontSize: '13px',
 }
 
-function categoryName(id: number) {
-  return CATEGORIES.find(item => item.id === id)?.name ?? '—'
+function categoryName(id) {
+  return CATEGORIES.value.find(item => item.id === id)?.name ?? '—'
 }
 
-function money(value: number) {
+function money(value) {
   return value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 /* 分类对应的缩略图底色（列表页占位用，图片字段接入后可换成真图缩略） */
-const TONES: Record<number, string> = {
+const TONES = {
   1: '#eef3fe',
   2: '#f1f0fe',
   3: '#eaf6f0',
@@ -99,14 +105,14 @@ function onCreate() {
   ElMessage.info('新建商品：与编辑页共用表单，接口阶段一起接')
 }
 
-function onEdit(row: Product) {
+function onEdit(row) {
   navigateTo(`/products/${row.id}`)
 }
 
 /* ---------- 上下架：列表内直接切换（权限 product:status） ---------- */
-const switchingId = ref<number | null>(null)
+const switchingId = ref(null)
 
-function onToggleStatus(row: Product, value: ProductStatus) {
+function onToggleStatus(row, value) {
   switchingId.value = row.id
   // 假请求：接口阶段换成 PUT /api/products/:id/status
   setTimeout(() => {
@@ -116,7 +122,7 @@ function onToggleStatus(row: Product, value: ProductStatus) {
   }, 300)
 }
 
-function onDelete(row: Product) {
+function onDelete(row) {
   ElMessageBox.confirm(`确定删除商品「${row.name}」吗？删除后不可恢复。`, '删除确认', {
     type: 'warning',
     confirmButtonText: '删除',
@@ -215,7 +221,7 @@ function onDelete(row: Product) {
               inactive-text="下架"
               class="status-switch"
               :loading="switchingId === row.id"
-              @change="(value: ProductStatus) => onToggleStatus(row, value)"
+              @change="value => onToggleStatus(row, value)"
             />
             <el-tag v-else :type="row.status === 'on' ? 'success' : 'info'" size="small" effect="light">
               {{ row.status === 'on' ? '已上架' : '已下架' }}

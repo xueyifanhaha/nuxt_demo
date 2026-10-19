@@ -1,25 +1,18 @@
-<script setup lang="ts">
+<script setup>
 import { ElMessage } from 'element-plus'
 import { Lock, User } from '@element-plus/icons-vue'
-import type { FormInstance, FormRules } from 'element-plus'
 
 definePageMeta({ layout: 'auth' })
 
 useHead({ title: '登录 · 商品运营后台' })
 
-interface DemoAccount {
-  username: string
-  role: string
-  level: number
-}
-
-const demoAccounts: DemoAccount[] = [
+const demoAccounts = [
   { username: 'admin', role: '1 级 · 管理员', level: 1 },
   { username: 'editor', role: '2 级 · 运营', level: 2 },
   { username: 'viewer', role: '3 级 · 只读', level: 3 },
 ]
 
-const formRef = ref<FormInstance>()
+const formRef = ref()
 const loading = ref(false)
 const auth = useAuthStore()
 const route = useRoute()
@@ -31,7 +24,7 @@ const form = reactive({
   remember: true,
 })
 
-const rules: FormRules = {
+const rules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
     { min: 3, message: '用户名至少 3 个字符', trigger: 'blur' },
@@ -42,7 +35,7 @@ const rules: FormRules = {
   ],
 }
 
-function fill(username: string) {
+function fill(username) {
   form.username = username
   form.password = 'demo-123456'
   formRef.value?.clearValidate()
@@ -59,13 +52,10 @@ async function submit() {
     const user = await auth.login(form.username, form.password)
     ElMessage.success(`欢迎回来，${user.name}`)
     // 登录前被守卫拦下的页面，登录后直接送回去
-    await navigateTo((route.query.redirect as string) || '/products')
+    await navigateTo(route.query.redirect || '/products')
   }
-  catch (error: unknown) {
-    const message
-      = error instanceof Error && 'data' in error
-        ? (error as { data?: { message?: string } }).data?.message
-        : undefined
+  catch (error) {
+    const message = error?.data?.message
     ElMessage.error(message ?? '登录失败，请稍后重试')
   }
   finally {

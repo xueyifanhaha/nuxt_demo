@@ -1,9 +1,10 @@
-<script setup lang="ts">
-import type { NuxtError } from '#app'
-
-const props = defineProps<{
-  error: NuxtError
-}>()
+<script setup>
+const props = defineProps({
+  error: {
+    type: Object,
+    default: null,
+  },
+})
 
 const is404 = computed(() => props.error?.statusCode === 404)
 

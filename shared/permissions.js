@@ -11,22 +11,12 @@ export const PERM = {
   CATEGORY_EDIT: 'category:edit',
   LOG_VIEW: 'log:view',
   ROLE_MANAGE: 'role:manage',
-} as const
-
-export type Permission = (typeof PERM)[keyof typeof PERM]
-
-export const ALL_PERMISSIONS: Permission[] = Object.values(PERM)
-
-export interface RoleDefinition {
-  level: number
-  key: string
-  label: string
-  description: string
-  permissions: Permission[]
 }
 
+export const ALL_PERMISSIONS = Object.values(PERM)
+
 /** 种子角色：1 级固定拥有全部权限，2/3 级后续可在权限管理页调整 */
-export const ROLE_PRESETS: RoleDefinition[] = [
+export const ROLE_PRESETS = [
   {
     level: 1,
     key: 'admin',
@@ -56,15 +46,8 @@ export const ROLE_PRESETS: RoleDefinition[] = [
   },
 ]
 
-export interface AdminNavItem {
-  to: string
-  label: string
-  icon: string
-  permission: Permission
-}
-
 /** 侧边栏菜单：按权限过滤后渲染，所以 2/3 级看不到日志与权限管理 */
-export const ADMIN_NAV: AdminNavItem[] = [
+export const ADMIN_NAV = [
   { to: '/products', label: '商品管理', icon: 'goods', permission: PERM.PRODUCT_VIEW },
   { to: '/categories', label: '分类管理', icon: 'tag', permission: PERM.CATEGORY_VIEW },
   { to: '/logs', label: '操作日志', icon: 'log', permission: PERM.LOG_VIEW },
@@ -72,7 +55,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
 ]
 
 /** 权限管理页用的分组展示 */
-export const PERMISSION_GROUPS: { group: string; items: { perm: Permission; label: string }[] }[] = [
+export const PERMISSION_GROUPS = [
   {
     group: '商品',
     items: [

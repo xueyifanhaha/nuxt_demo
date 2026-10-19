@@ -1,16 +1,15 @@
-<script setup lang="ts">
+<script setup>
 import { Refresh, Search } from '@element-plus/icons-vue'
-import type { LogEntry } from '#shared/types'
 import { SEED_LOGS } from '#shared/seed'
 
 definePageMeta({ layout: 'default' })
 useHead({ title: '操作日志 · 商品运营后台' })
 
 /* ---------- 静态数据：服务端接口接入后替换（GET /api/logs） ---------- */
-const logs = ref<LogEntry[]>([...SEED_LOGS])
+const logs = ref([...SEED_LOGS])
 
 /** 动作类型 → 展示文案与标签色（接口阶段可与服务端共用一份枚举） */
-const ACTION_META: Record<string, { label: string; tag: 'primary' | 'success' | 'warning' | 'danger' | 'info' }> = {
+const ACTION_META = {
   login: { label: '登录', tag: 'info' },
   'product:update': { label: '编辑商品', tag: 'primary' },
   'product:status': { label: '上下架', tag: 'warning' },
@@ -26,12 +25,12 @@ const ACTION_OPTIONS = Object.entries(ACTION_META).map(([value, meta]) => ({
   label: meta.label,
 }))
 
-function actionMeta(action: string) {
-  return ACTION_META[action] ?? { label: action, tag: 'info' as const }
+function actionMeta(action) {
+  return ACTION_META[action] ?? { label: action, tag: 'info' }
 }
 
 /* ---------- 筛选与分页（本地算，接接口后换成 query 参数） ---------- */
-const filters = reactive<{ action?: string; q: string }>({ action: undefined, q: '' })
+const filters = reactive({ action: undefined, q: '' })
 const draftQ = ref('')
 const page = ref(1)
 const pageSize = ref(8)

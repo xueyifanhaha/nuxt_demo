@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup>
 definePageMeta({ layout: false })
 useHead({ title: '无权限访问 · 商品运营后台' })
 </script>

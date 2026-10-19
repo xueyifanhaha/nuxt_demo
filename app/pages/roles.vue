@@ -1,7 +1,6 @@
-<script setup lang="ts">
+<script setup>
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
-import type { Permission } from '#shared/permissions'
 import { PERMISSION_GROUPS, ROLE_PRESETS } from '#shared/permissions'
 
 definePageMeta({ layout: 'default' })
@@ -14,18 +13,16 @@ const LEVELS = [
   { level: 1, label: '1 级 · 管理员', locked: true },
   { level: 2, label: '2 级 · 运营', locked: false },
   { level: 3, label: '3 级 · 只读', locked: false },
-] as const
+]
 
 /** 草稿：{ 1: [...], 2: [...], 3: [...] }，与 roles 状态比较得出「是否有未保存修改」 */
-const draft = reactive<Record<number, Permission[]>>(
-  Object.fromEntries(roles.value.map(r => [r.level, [...r.permissions]])),
-)
+const draft = reactive(Object.fromEntries(roles.value.map(r => [r.level, [...r.permissions]])))
 
-function isChecked(level: number, perm: Permission) {
+function isChecked(level, perm) {
   return draft[level]?.includes(perm) ?? false
 }
 
-function toggle(level: number, perm: Permission) {
+function toggle(level, perm) {
   const list = draft[level]
   if (!list) return
   const index = list.indexOf(perm)

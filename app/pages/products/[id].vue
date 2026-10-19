@@ -1,18 +1,24 @@
-<script setup lang="ts">
+<script setup>
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
-import type { FormInstance, FormRules } from 'element-plus'
 import { PERM } from '#shared/permissions'
-import type { ProductStatus } from '#shared/types'
-import { SEED_CATEGORIES, SEED_PRODUCTS } from '#shared/seed'
+import { SEED_PRODUCTS } from '#shared/seed'
 
 definePageMeta({ layout: 'default' })
 useHead({ title: '商品编辑 · 商品运营后台' })
 
 const route = useRoute()
-const id = route.params.id as string
+const id = route.params.id
 
-/* 静态阶段从 mock 数据里找；接接口后换成 GET /api/products/:id */
+/* 分类读服务端，新建的分类能直接选到（商品数据下一步接接口） */
+const requestFetch = useRequestFetch()
+const { data: categoryData } = await useAsyncData(
+  'categories-for-product-edit',
+  () => requestFetch('/api/categories'),
+)
+const categories = computed(() => categoryData.value?.items ?? [])
+
+/* 静态阶段从种子数据里找；接接口后换成 GET /api/products/:id */
 const product = SEED_PRODUCTS.find(item => String(item.id) === id)
 
 // 找不到直接抛给 error.vue，顺便演示 404 链路
@@ -21,10 +27,10 @@ if (!product) {
 }
 
 const { can } = usePermission()
-/** 此页进入条件就是 product:edit；接入路由守卫后，无权限会在中间件层直接 403 */
+/** 此页进入条件就是 product:edit；无权限会在中间件层直接 403，这里只是兜底 */
 const canEdit = computed(() => can(PERM.PRODUCT_EDIT))
 
-const formRef = ref<FormInstance>()
+const formRef = ref()
 const saving = ref(false)
 
 const form = reactive({
@@ -32,11 +38,11 @@ const form = reactive({
   categoryId: product.categoryId,
   price: product.price,
   stock: product.stock,
-  status: product.status as ProductStatus,
+  status: product.status,
   description: product.description,
 })
 
-const rules: FormRules = {
+const rules = {
   name: [
     { required: true, message: '请输入商品名称', trigger: 'blur' },
     { min: 2, max: 40, message: '长度在 2 到 40 个字符', trigger: 'blur' },
@@ -62,17 +68,17 @@ async function save() {
 }
 
 function resetForm() {
-  form.name = product!.name
-  form.categoryId = product!.categoryId
-  form.price = product!.price
-  form.stock = product!.stock
-  form.status = product!.status
-  form.description = product!.description
+  form.name = product.name
+  form.categoryId = product.categoryId
+  form.price = product.price
+  form.stock = product.stock
+  form.status = product.status
+  form.description = product.description
   formRef.value?.clearValidate()
 }
 
 const categoryName = computed(
-  () => SEED_CATEGORIES.find(item => item.id === form.categoryId)?.name ?? '—',
+  () => categories.value.find(item => item.id === form.categoryId)?.name ?? '—',
 )
 </script>
 
@@ -86,7 +92,7 @@ const categoryName = computed(
         </NuxtLink>
         <h1>{{ form.name || '商品编辑' }}</h1>
         <p class="head-meta">
-          <span>{{ product!.sku }}</span>
+          <span>{{ product.sku }}</span>
           <i>/</i>
           <span>{{ categoryName }}</span>
           <i>/</i>
@@ -131,7 +137,7 @@ const categoryName = computed(
             <el-form-item label="商品分类" prop="categoryId">
               <el-select v-model="form.categoryId" placeholder="请选择分类" class="w-full">
                 <el-option
-                  v-for="item in SEED_CATEGORIES"
+                  v-for="item in categories"
                   :key="item.id"
                   :label="item.name"
                   :value="item.id"
@@ -189,19 +195,19 @@ const categoryName = computed(
             <h2>其他信息</h2>
             <div class="meta-row">
               <span>SKU</span>
-              <b>{{ product!.sku }}</b>
+              <b>{{ product.sku }}</b>
             </div>
             <div class="meta-row">
               <span>创建时间</span>
-              <b>{{ product!.createdAt }}</b>
+              <b>{{ product.createdAt }}</b>
             </div>
             <div class="meta-row">
               <span>最近更新</span>
-              <b>{{ product!.updatedAt }}</b>
+              <b>{{ product.updatedAt }}</b>
             </div>
             <div class="meta-row">
               <span>最近操作人</span>
-              <b>{{ product!.updatedBy }}</b>
+              <b>{{ product.updatedBy }}</b>
             </div>
           </section>
         </div>

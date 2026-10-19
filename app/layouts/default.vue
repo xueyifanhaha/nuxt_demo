@@ -1,5 +1,4 @@
-<script setup lang="ts">
-import type { Component } from 'vue'
+<script setup>
 import { ElMessage } from 'element-plus'
 import { CollectionTag, Goods, Lock, SwitchButton, Tickets } from '@element-plus/icons-vue'
 import { ADMIN_NAV } from '#shared/permissions'
@@ -8,7 +7,7 @@ const { role, can } = usePermission()
 const auth = useAuthStore()
 const route = useRoute()
 
-const iconMap: Record<string, Component> = {
+const iconMap = {
   goods: Goods,
   tag: CollectionTag,
   log: Tickets,

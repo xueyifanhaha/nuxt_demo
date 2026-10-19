@@ -1,8 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import type { H3Event } from 'h3'
 import { getCookie, setCookie, deleteCookie } from 'h3'
-import type { AuthUser } from '#shared/types'
-import { db, type StoredUser } from './db'
+import { db } from './db'
 
 /**
  * 会话：自实现的签名 cookie（HMAC-SHA256）。
@@ -14,26 +12,21 @@ const COOKIE_NAME = 'admin_session'
 const MAX_AGE = 60 * 60 * 24 * 7 // 7 天
 const SECRET = process.env.SESSION_SECRET ?? 'nuxt-demo-dev-secret-change-me'
 
-interface SessionPayload {
-  uid: number
-  exp: number
-}
-
-function base64url(input: Buffer | string) {
+function base64url(input) {
   return Buffer.from(input).toString('base64url')
 }
 
-function sign(data: string) {
+function sign(data) {
   return createHmac('sha256', SECRET).update(data).digest('base64url')
 }
 
-export function createSessionToken(user: StoredUser) {
-  const payload: SessionPayload = { uid: user.id, exp: Date.now() + MAX_AGE * 1000 }
+export function createSessionToken(user) {
+  const payload = { uid: user.id, exp: Date.now() + MAX_AGE * 1000 }
   const body = base64url(JSON.stringify(payload))
   return `${body}.${sign(body)}`
 }
 
-function verifySessionToken(token: string): SessionPayload | null {
+function verifySessionToken(token) {
   const [body, sig] = token.split('.')
   if (!body || !sig) return null
 
@@ -43,7 +36,7 @@ function verifySessionToken(token: string): SessionPayload | null {
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null
 
   try {
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString()) as SessionPayload
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString())
     if (!payload?.uid || payload.exp < Date.now()) return null
     return payload
   }
@@ -52,7 +45,7 @@ function verifySessionToken(token: string): SessionPayload | null {
   }
 }
 
-export function setSessionCookie(event: H3Event, user: StoredUser) {
+export function setSessionCookie(event, user) {
   setCookie(event, COOKIE_NAME, createSessionToken(user), {
     httpOnly: true,
     sameSite: 'lax',
@@ -63,12 +56,12 @@ export function setSessionCookie(event: H3Event, user: StoredUser) {
   })
 }
 
-export function clearSessionCookie(event: H3Event) {
+export function clearSessionCookie(event) {
   deleteCookie(event, COOKIE_NAME, { path: '/' })
 }
 
 /** 从请求里还原当前用户；cookie 缺失 / 签名无效 / 用户已不存在 都返回 null */
-export function getSessionUser(event: H3Event): AuthUser | null {
+export function getSessionUser(event) {
   const token = getCookie(event, COOKIE_NAME)
   if (!token) return null
 
@@ -82,6 +75,6 @@ export function getSessionUser(event: H3Event): AuthUser | null {
 }
 
 /** 前端展示用的角色文案（写日志时用） */
-export function roleLabel(level: number) {
+export function roleLabel(level) {
   return db.getRole(level)?.label ?? `${level} 级`
 }

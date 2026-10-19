@@ -1,14 +1,23 @@
-// 种子数据：服务端 db 与前端静态页面共用的初始数据（接口阶段前端会移除这份引用）
-import type { Category, LogEntry, Product } from '#shared/types'
+// 种子数据：服务端 db 的初始数据（前端已全部改为读接口）
 
-export const SEED_CATEGORIES: Category[] = [
+/** 系统分类「未分类」的固定 id：删除分类时商品自动归入这里，不可编辑 / 删除 */
+export const UNCATEGORIZED_ID = 0
+
+export const SEED_CATEGORIES = [
+  {
+    id: UNCATEGORIZED_ID,
+    name: '未分类',
+    description: '系统分类，删除其他分类时商品自动归入这里',
+    createdAt: '2026-08-01 09:00',
+    system: true,
+  },
   { id: 1, name: '手机数码', description: '手机、耳机、电脑配件', createdAt: '2026-08-01 09:00' },
   { id: 2, name: '家用电器', description: '大家电与厨房电器', createdAt: '2026-08-01 09:00' },
   { id: 3, name: '服饰鞋包', description: '服装、鞋靴、箱包', createdAt: '2026-08-01 09:00' },
   { id: 4, name: '食品生鲜', description: '零食、生鲜、礼盒', createdAt: '2026-08-01 09:00' },
 ]
 
-export const SEED_PRODUCTS: Product[] = [
+export const SEED_PRODUCTS = [
   {
     id: 101,
     name: 'iPhone 15 Pro 256G',
@@ -167,7 +176,7 @@ export const SEED_PRODUCTS: Product[] = [
   },
 ]
 
-export const SEED_LOGS: LogEntry[] = [
+export const SEED_LOGS = [
   { id: 3001, at: '2026-10-18 21:35', actorId: 1, actorName: 'admin', actorRole: '1 级 · 管理员', action: 'product:update', targetType: '商品', targetId: 101, targetName: 'iPhone 15 Pro 256G', detail: '价格 9299 → 8999' },
   { id: 3002, at: '2026-10-18 20:12', actorId: 2, actorName: 'editor', actorRole: '2 级 · 运营', action: 'product:update', targetType: '商品', targetId: 102, targetName: '小米 14 Ultra 16G+512G', detail: '库存 12 → 8' },
   { id: 3003, at: '2026-10-18 16:47', actorId: 2, actorName: 'editor', actorRole: '2 级 · 运营', action: 'product:status', targetType: '商品', targetId: 104, targetName: '索尼 WH-1000XM5 头戴耳机', detail: '上架 → 下架' },

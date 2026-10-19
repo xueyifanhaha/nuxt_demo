@@ -1,22 +1,27 @@
-<script setup lang="ts">
+<script setup>
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import { PERM } from '#shared/permissions'
-import type { Category } from '#shared/types'
-import { SEED_CATEGORIES, SEED_PRODUCTS } from '#shared/seed'
 
 definePageMeta({ layout: 'default' })
 useHead({ title: '分类管理 · 商品运营后台' })
 
 const { can, role } = usePermission()
 
-/* ---------- 静态数据：服务端接口接入后替换 ---------- */
-let nextId = Math.max(...SEED_CATEGORIES.map(item => item.id)) + 1
-const categories = ref<Category[]>([...SEED_CATEGORIES])
+/**
+ * 读列表必须用 useRequestFetch：SSR 阶段直接发请求时，裸 $fetch 不带浏览器 cookie，
+ * 会被服务端的 category:view 权限挡成 401。
+ */
+const requestFetch = useRequestFetch()
+const { data, pending, error, refresh } = await useAsyncData(
+  'categories',
+  () => requestFetch('/api/categories'),
+)
 
-/** 关联商品数：接接口后由服务端返回，删除校验也由服务端兜底 */
-function productCount(id: number) {
-  return SEED_PRODUCTS.filter(item => item.categoryId === id).length
+const categories = computed(() => data.value?.items ?? [])
+
+function errorMessage(err, fallback) {
+  return err?.data?.message ?? err?.statusMessage ?? fallback
 }
 
 const headerStyle = {
@@ -28,7 +33,7 @@ const headerStyle = {
 
 /* ---------- 新增 / 编辑弹窗 ---------- */
 const dialogVisible = ref(false)
-const editing = ref<Category | null>(null) // null = 新建
+const editing = ref(null) // null = 新建
 const submitting = ref(false)
 
 const formRef = ref()
@@ -48,57 +53,75 @@ function openCreate() {
   dialogVisible.value = true
 }
 
-function openEdit(row: Category) {
+function openEdit(row) {
+  if (row.system) return
   editing.value = row
   form.name = row.name
   form.description = row.description ?? ''
   dialogVisible.value = true
 }
 
-function onSubmit() {
-  formRef.value?.validate((valid: boolean) => {
-    if (!valid) return
-    submitting.value = true
-    // 假提交：接口阶段换成 POST /api/categories 或 PUT /api/categories/:id
-    setTimeout(() => {
-      if (editing.value) {
-        editing.value.name = form.name
-        editing.value.description = form.description
-        ElMessage.success(`已保存分类「${form.name}」`)
-      }
-      else {
-        categories.value.push({
-          id: nextId++,
-          name: form.name,
-          description: form.description,
-          createdAt: new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16),
-        })
-        ElMessage.success(`已创建分类「${form.name}」`)
-      }
-      submitting.value = false
-      dialogVisible.value = false
-    }, 300)
-  })
+async function onSubmit() {
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  const payload = { name: form.name.trim(), description: form.description.trim() }
+
+  submitting.value = true
+  try {
+    if (editing.value) {
+      await $fetch(`/api/categories/${editing.value.id}`, { method: 'PUT', body: payload })
+      ElMessage.success(`已保存分类「${payload.name}」`)
+    }
+    else {
+      await $fetch('/api/categories', { method: 'POST', body: payload })
+      ElMessage.success(`已创建分类「${payload.name}」`)
+    }
+    dialogVisible.value = false
+    await refresh()
+  }
+  catch (err) {
+    // 重名 409、长度 400 等都带服务端 message，弹窗保持打开让用户改
+    ElMessage.error(errorMessage(err, '保存失败，请稍后重试'))
+  }
+  finally {
+    submitting.value = false
+  }
 }
 
-/* ---------- 删除（有商品在用时禁止，模拟服务端约束） ---------- */
-function onDelete(row: Category) {
-  const count = productCount(row.id)
-  if (count > 0) {
-    ElMessage.warning(`「${row.name}」下还有 ${count} 件商品，请先移走商品再删除`)
-    return
+/* ---------- 删除：有商品也允许，商品会移入「未分类」 ---------- */
+async function onDelete(row) {
+  if (row.system) return
+
+  const warning = row.productCount > 0
+    ? `确定删除分类「${row.name}」吗？
+    该分类下有 ${row.productCount} 件商品，删除后这些商品将移入「未分类」。`
+    : `确定删除分类「${row.name}」吗？`
+
+  try {
+    await ElMessageBox.confirm(
+      warning,
+      '删除确认',
+      {
+        type: 'warning',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        confirmButtonClass: 'el-button--danger',
+      },
+    )
   }
-  ElMessageBox.confirm(`确定删除分类「${row.name}」吗？删除后不可恢复。`, '删除确认', {
-    type: 'warning',
-    confirmButtonText: '删除',
-    cancelButtonText: '取消',
-    confirmButtonClass: 'el-button--danger',
-  })
-    .then(() => {
-      categories.value = categories.value.filter(item => item.id !== row.id)
-      ElMessage.success(`已删除分类「${row.name}」`)
-    })
-    .catch(() => {})
+  catch {
+    return // 用户取消
+  }
+
+  try {
+    const res = await $fetch(`/api/categories/${row.id}`, { method: 'DELETE' })
+    ElMessage.success(res.moved > 0 ? `已删除，${res.moved} 件商品移入「未分类」` : '已删除')
+    await refresh()
+  }
+  catch (err) {
+    ElMessage.error(errorMessage(err, '删除失败，请稍后重试'))
+  }
 }
 </script>
 
@@ -114,11 +137,18 @@ function onDelete(row: Category) {
       </el-button>
     </div>
 
-    <section class="card table-card">
-      <el-table :data="categories" :header-cell-style="headerStyle" empty-text="还没有分类">
+    <section v-if="error" class="card error-card">
+      <el-alert type="error" :closable="false" show-icon title="分类加载失败"
+        :description="errorMessage(error, '请确认登录状态后重试')" />
+      <el-button class="retry" @click="refresh()">重新加载</el-button>
+    </section>
+
+    <section v-else class="card table-card">
+      <el-table v-loading="pending" :data="categories" :header-cell-style="headerStyle" empty-text="还没有分类">
         <el-table-column label="分类名称" min-width="180">
           <template #default="{ row }">
             <span class="cat-name">{{ row.name }}</span>
+            <el-tag v-if="row.system" size="small" type="info" effect="plain" class="sys-tag">系统</el-tag>
           </template>
         </el-table-column>
 
@@ -130,8 +160,8 @@ function onDelete(row: Category) {
 
         <el-table-column label="关联商品" width="110" align="center">
           <template #default="{ row }">
-            <el-tag :type="productCount(row.id) > 0 ? 'primary' : 'info'" size="small" effect="plain">
-              {{ productCount(row.id) }} 件
+            <el-tag :type="row.productCount > 0 ? 'primary' : 'info'" size="small" effect="plain">
+              {{ row.productCount }} 件
             </el-tag>
           </template>
         </el-table-column>
@@ -140,39 +170,29 @@ function onDelete(row: Category) {
 
         <el-table-column v-if="can(PERM.CATEGORY_EDIT)" label="操作" width="130" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="danger" @click="onDelete(row)">删除</el-button>
+            <template v-if="!row.system">
+              <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+              <el-button link type="danger" @click="onDelete(row)">删除</el-button>
+            </template>
+            <span v-else class="locked">不可操作</span>
           </template>
         </el-table-column>
       </el-table>
 
       <div class="table-foot">
-        <span class="hint">共 {{ categories.length }} 条 · 有商品在用的分类不可删除</span>
-        <el-button :icon="Refresh" size="small" text bg @click="categories = [...SEED_CATEGORIES]">
-          重置演示数据
-        </el-button>
+        <span class="hint">共 {{ categories.length }} 条 · 删除分类后，其下商品会自动移入「未分类」</span>
       </div>
     </section>
 
-    <el-dialog
-      v-model="dialogVisible"
-      :title="editing ? `编辑分类 · ${editing.name}` : '新建分类'"
-      width="440px"
-      destroy-on-close
-    >
+    <el-dialog v-model="dialogVisible" :title="editing ? `编辑分类 · ${editing.name}` : '新建分类'" width="440px"
+      destroy-on-close>
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
         <el-form-item label="分类名称" prop="name">
           <el-input v-model="form.name" placeholder="如：手机数码" maxlength="20" show-word-limit />
         </el-form-item>
         <el-form-item label="描述" prop="description">
-          <el-input
-            v-model="form.description"
-            type="textarea"
-            :rows="3"
-            placeholder="选填，简单说明这个分类放什么"
-            maxlength="100"
-            show-word-limit
-          />
+          <el-input v-model="form.description" type="textarea" :rows="3" placeholder="选填，简单说明这个分类放什么" maxlength="100"
+            show-word-limit />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -218,6 +238,30 @@ function onDelete(row: Category) {
   font-size: 13.5px;
   font-weight: 500;
   color: var(--app-text);
+}
+
+.sys-tag {
+  margin-left: 8px;
+}
+
+.locked {
+  font-size: 12.5px;
+  color: #c0c4cc;
+}
+
+.error-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+.error-card :deep(.el-alert) {
+  flex: 1;
+}
+
+.retry {
+  flex: none;
 }
 
 .desc {

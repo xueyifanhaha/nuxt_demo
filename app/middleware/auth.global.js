@@ -1,6 +1,4 @@
-import type { Permission } from '#shared/permissions'
 import { PERM } from '#shared/permissions'
-import type { AuthUser } from '#shared/types'
 
 /**
  * 全局路由守卫 —— 页面级权限的那道关。
@@ -10,13 +8,13 @@ import type { AuthUser } from '#shared/types'
  *
  * 注意：这里直接用 useState 读写登录态而不是调 useAuthStore()——
  * SSR 首次导航发生在 Pinia 插件之前，生产环境在中间件里用 store 会报
- * "no active Pinia"。store（app/stores/auth.ts）读写的是同一批 useState，
+ * "no active Pinia"。store（app/stores/auth.js）读写的是同一批 useState，
  * 两边天然同步。
  */
 export default defineNuxtRouteMiddleware(async (to) => {
-  const user = useState<AuthUser | null>('auth-user', () => null)
-  const permissions = useState<Permission[]>('auth-permissions', () => [])
-  const loaded = useState<boolean>('auth-loaded', () => false)
+  const user = useState('auth-user', () => null)
+  const permissions = useState('auth-permissions', () => [])
+  const loaded = useState('auth-loaded', () => false)
   const requestFetch = useRequestFetch()
 
   const isLogin = to.path === '/login'
@@ -24,7 +22,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   // 冷启动 / 刷新：向服务端确认会话（SSR 端 requestFetch 会带上浏览器 cookie）
   if (!loaded.value && !isLogin) {
     try {
-      const res = await requestFetch<{ user: AuthUser; permissions: Permission[] }>('/api/auth/me')
+      const res = await requestFetch('/api/auth/me')
       user.value = res.user
       permissions.value = res.permissions
     }
@@ -40,7 +38,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (isLogin) {
     // 已登录还来登录页 → 回到来源页或商品列表
     if (user.value) {
-      return navigateTo((to.query.redirect as string) || '/products')
+      return navigateTo(to.query.redirect || '/products')
     }
     return
   }
@@ -56,7 +54,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
 })
 
 /** 路由 → 所需权限点。/login、/403 不在表里即公开 */
-function requiredPerm(path: string): Permission | null {
+function requiredPerm(path) {
   if (path.startsWith('/products/')) return PERM.PRODUCT_EDIT // 详情即编辑页
   if (path.startsWith('/products')) return PERM.PRODUCT_VIEW
   if (path.startsWith('/categories')) return PERM.CATEGORY_VIEW

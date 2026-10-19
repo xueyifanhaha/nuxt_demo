@@ -1,6 +1,4 @@
 import { defineStore } from 'pinia'
-import type { Permission } from '#shared/permissions'
-import type { AuthUser } from '#shared/types'
 
 /**
  * 登录态与当前用户权限的唯一前端数据源。
@@ -12,19 +10,19 @@ import type { AuthUser } from '#shared/types'
  * store 负责业务动作（login/logout/fetchMe），页面只跟 store 打交道。
  */
 export const useAuthStore = defineStore('auth', () => {
-  const user = useState<AuthUser | null>('auth-user', () => null)
-  const permissions = useState<Permission[]>('auth-permissions', () => [])
+  const user = useState('auth-user', () => null)
+  const permissions = useState('auth-permissions', () => [])
   /** 是否已经向服务端确认过一次会话（防止守卫重复请求 /me） */
-  const loaded = useState<boolean>('auth-loaded', () => false)
+  const loaded = useState('auth-loaded', () => false)
 
   const loggedIn = computed(() => user.value !== null)
   const roleLevel = computed(() => user.value?.roleLevel ?? 0)
 
-  const can = (perm: Permission) => permissions.value.includes(perm)
-  const canAny = (...perms: Permission[]) => perms.some(p => can(p))
+  const can = perm => permissions.value.includes(perm)
+  const canAny = (...perms) => perms.some(p => can(p))
 
-  async function login(username: string, password: string) {
-    const res = await $fetch<{ user: AuthUser; permissions: Permission[] }>('/api/auth/login', {
+  async function login(username, password) {
+    const res = await $fetch('/api/auth/login', {
       method: 'POST',
       body: { username, password },
     })
@@ -34,9 +32,9 @@ export const useAuthStore = defineStore('auth', () => {
     return res.user
   }
 
-  async function fetchMe(requestFetch: typeof $fetch = $fetch) {
+  async function fetchMe(requestFetch = $fetch) {
     try {
-      const res = await requestFetch<{ user: AuthUser; permissions: Permission[] }>('/api/auth/me')
+      const res = await requestFetch('/api/auth/me')
       user.value = res.user
       permissions.value = res.permissions
     }

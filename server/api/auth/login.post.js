@@ -1,9 +1,9 @@
 import { createError, readBody } from 'h3'
-import { db, verifyPassword } from '../../utils/db'
-import { roleLabel, setSessionCookie } from '../../utils/session'
+import { db, verifyPassword } from '../../utils/db.js'
+import { roleLabel, setSessionCookie } from '../../utils/session.js'
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody<{ username?: string; password?: string }>(event)
+  const body = await readBody(event)
   const username = String(body?.username ?? '').trim().toLowerCase()
   const password = String(body?.password ?? '')
 
