@@ -1,14 +1,18 @@
 <script setup>
 import { Refresh, Search } from '@element-plus/icons-vue'
-import { SEED_LOGS } from '#shared/seed'
 
 definePageMeta({ layout: 'default' })
 useHead({ title: '操作日志 · 商品运营后台' })
 
-/* ---------- 静态数据：服务端接口接入后替换（GET /api/logs） ---------- */
-const logs = ref([...SEED_LOGS])
+/* ---------- 取数：日志是只读数据，没有任何写操作 ---------- */
 
-/** 动作类型 → 展示文案与标签色（接口阶段可与服务端共用一份枚举） */
+/**
+ * setup 顶层会发生 SSR，服务端没有浏览器的 cookie，
+ * 所以这里必须用 useRequestFetch() 建 api（浏览器端它等价于 $fetch）。
+ */
+const api = useApi(useRequestFetch())
+
+/** 动作类型 → 展示文案与标签色（和服务端写日志用的 action 字符串一一对应） */
 const ACTION_META = {
   login: { label: '登录', tag: 'info' },
   'product:update': { label: '编辑商品', tag: 'primary' },
@@ -29,48 +33,69 @@ function actionMeta(action) {
   return ACTION_META[action] ?? { label: action, tag: 'info' }
 }
 
-/* ---------- 筛选与分页（本地算，接接口后换成 query 参数） ---------- */
-const filters = reactive({ action: undefined, q: '' })
-const draftQ = ref('')
-const page = ref(1)
-const pageSize = ref(8)
-
-const filtered = computed(() => {
-  const keyword = filters.q.trim().toLowerCase()
-  return logs.value.filter((item) => {
-    if (filters.action && item.action !== filters.action) return false
-    if (keyword && !`${item.actorName} ${item.targetName} ${item.detail}`.toLowerCase().includes(keyword))
-      return false
-    return true
-  })
+/** 筛选条件：空值表示不筛 */
+const filters = reactive({
+  action: undefined,
+  keyword: '',
 })
 
-const paged = computed(() => {
-  const start = (page.value - 1) * pageSize.value
-  return filtered.value.slice(start, start + pageSize.value)
+/** 分页状态：页码 + 每页条数 */
+const pager = reactive({
+  page: 1,
+  pageSize: 8,
 })
 
-watch(
-  [() => filters.action, () => filters.q],
-  () => {
-    page.value = 1
-  },
+/**
+ * 查询条件：分页与筛选合并成一个普通对象。
+ * 空字符串统一转 undefined，序列化时直接丢掉；接口参数名是 q，前端字段叫 keyword。
+ */
+const query = computed(() => ({
+  ...pager,
+  action: filters.action || undefined,
+  q: filters.keyword.trim() || undefined,
+}))
+
+/**
+ * key 固定为 'logs'，靠 watch query 触发重新取数。
+ * 日志是只读的，所以不需要 patchItem / refresh 这类回写逻辑，
+ * 唯一要处理的是「删到空页」之外的页码边界 —— 日志只会增加，翻页时不会变少。
+ */
+const { data: logData, pending, error, refresh } = await useAsyncData(
+  'logs',
+  () => api.logs.list(query.value),
+  { watch: [query] },
 )
 
-watch(pageSize, () => {
-  page.value = 1
-})
+const items = computed(() => logData.value?.items ?? [])
+const total = computed(() => logData.value?.total ?? 0)
 
+/** 首屏取数失败（如权限不足）：useAsyncData 的 error 形状与 FetchError 一致，沿用同一套兜底 */
+const loadErrorText = computed(() =>
+  error.value?.data?.data?.message
+  ?? error.value?.data?.message
+  ?? error.value?.statusMessage
+  ?? '请确认登录状态后重试',
+)
+
+/** 条件一变就回第一页，否则会停在新结果里不存在的页码上 */
 function applySearch() {
-  filters.q = draftQ.value.trim()
-  page.value = 1
+  pager.page = 1
 }
+
+/**
+ * 改每页条数时也要回第一页：
+ * 停在第 3 页、把条数从 8 改成 30，页码早已越界，表格会直接空掉。
+ * （筛选条件的复位由 query 变化本身驱动，这里只需管 pageSize。）
+ */
+watch(() => pager.pageSize, () => {
+  pager.page = 1
+})
 
 function resetFilters() {
   filters.action = undefined
-  filters.q = ''
-  draftQ.value = ''
-  page.value = 1
+  filters.keyword = ''
+  pager.page = 1
+  pager.pageSize = 8
 }
 
 /* ---------- 展示辅助 ---------- */
@@ -87,7 +112,7 @@ const headerStyle = {
     <div class="page-head">
       <div>
         <h1>操作日志</h1>
-        <p>共 {{ filtered.length }} 条记录 · 记录所有写操作，不可修改和删除</p>
+        <p>共 {{ total }} 条记录 · 记录所有写操作，不可修改和删除</p>
       </div>
     </div>
 
@@ -98,13 +123,12 @@ const headerStyle = {
         </el-select>
 
         <el-input
-          v-model="draftQ"
+          v-model="filters.keyword"
           placeholder="搜索操作人 / 对象 / 详情"
           :prefix-icon="Search"
           clearable
           class="w-220"
           @keyup.enter="applySearch"
-          @clear="applySearch"
         />
       </div>
 
@@ -114,8 +138,24 @@ const headerStyle = {
       </div>
     </section>
 
-    <section class="card table-card">
-      <el-table :data="paged" :header-cell-style="headerStyle" empty-text="没有匹配的日志">
+    <section v-if="error" class="card error-card">
+      <el-alert
+        type="error"
+        :closable="false"
+        show-icon
+        title="日志加载失败"
+        :description="loadErrorText"
+      />
+      <el-button class="retry" size="small" @click="refresh()">重新加载</el-button>
+    </section>
+
+    <section v-else class="card table-card">
+      <el-table
+        v-loading="pending"
+        :data="items"
+        :header-cell-style="headerStyle"
+        empty-text="没有匹配的日志"
+      >
         <el-table-column label="时间" width="150" prop="at" />
 
         <el-table-column label="操作人" width="170">
@@ -155,11 +195,11 @@ const headerStyle = {
       </el-table>
 
       <div class="table-foot">
-        <span class="hint">共 {{ filtered.length }} 条</span>
+        <span class="hint">共 {{ total }} 条</span>
         <el-pagination
-          v-model:current-page="page"
-          v-model:page-size="pageSize"
-          :total="filtered.length"
+          v-model:current-page="pager.page"
+          v-model:page-size="pager.pageSize"
+          :total="total"
           :page-sizes="[8, 15, 30]"
           layout="sizes, prev, pager, next"
           background
@@ -220,6 +260,14 @@ const headerStyle = {
 
 .w-220 {
   width: 220px;
+}
+
+.error-card {
+  padding: 16px;
+}
+
+.retry {
+  margin-top: 12px;
 }
 
 .table-card {

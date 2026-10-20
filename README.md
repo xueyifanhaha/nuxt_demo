@@ -2,7 +2,7 @@
 
 一个用于练习 **Nuxt 4 + Vue 3** 的电商后台管理项目，核心课题是**三层角色权限模型**如何贯穿导航、路由、按钮与接口。
 
-> 当前状态：登录认证已接入真实服务端（Nitro 接口 + 签名 cookie 会话 + 全局路由守卫）。商品、分类、日志、角色仍使用 `shared/seed.ts` 的种子数据，写操作只在客户端生效，尚未持久化。
+> 当前状态：认证、分类、商品（列表 + 详情）、操作日志已接入真实服务端（Nitro 接口 + 签名 cookie 会话 + 全局路由守卫）。权限管理页仍读前端种子数据；数据存在内存库中，进程重启回到种子状态。
 
 ## 技术栈
 
@@ -10,8 +10,8 @@
 | --- | --- |
 | 框架 | Nuxt 4（Nitro / Vue 3.5 / Vite） |
 | UI 组件库 | Element Plus（`@element-plus/nuxt`，主色已覆盖为 `#2563eb`） |
-| 状态管理 | Pinia（`@pinia/nuxt`，登录态与权限存于 `app/stores/auth.ts`） |
-| 权限定义 | `shared/permissions.ts`，前后端共用一份（`#shared` 别名） |
+| 状态管理 | Pinia（`@pinia/nuxt`，登录态与权限存于 `app/stores/auth.js`） |
+| 权限定义 | `shared/permissions.js`，前后端共用一份（`#shared` 别名） |
 
 ## 快速开始
 
@@ -62,29 +62,36 @@ app/
   assets/css/main.css        # 全局样式 + Element Plus 主题变量
   layouts/                   # default（后台壳）/ auth（登录）
   middleware/
-    auth.global.ts           # 全局守卫：登录态、redirect、页面权限
+    auth.global.js           # 全局守卫：登录态、redirect、页面权限
   stores/
-    auth.ts                  # Pinia：登录态、权限、login/logout/fetchMe
+    auth.js                  # Pinia：登录态、权限、login/logout/fetchMe
   composables/
-    usePermission.ts         # 页面权限判断（can / canAny / roles 草稿）
+    usePermission.js         # 页面权限判断（can / canAny / roles 草稿）
+    useApi.js                # 接口统一入口（products / categories / auth / logs + raw）
   pages/
     login.vue
     403.vue
-    products/index.vue       # 商品列表
+    products/index.vue       # 商品列表（服务端分页筛选）
     products/[id].vue        # 商品编辑
     categories.vue
     logs.vue
     roles.vue
 shared/
-  permissions.ts             # 权限点、角色预设、导航与分组定义
-  seed.ts                    # 服务端与页面共用的种子数据
-  types.ts                   # 共享类型
+  permissions.js             # 权限点、角色预设、导航与分组定义
+  seed.js                    # 服务端种子数据（前端已不再直接引用）
 server/
-  api/auth/                  # login / logout / me
+  api/
+    auth/                    # login / logout / me
+    categories/              # 分类增删改查
+    products/                # 列表 / 详情 / 编辑 / 上下架 / 删除
+    logs/index.get.js        # 操作日志（只读，分页 + 筛选）
   utils/
-    db.ts                    # 内存数据库（进程内单例）
-    session.ts               # HMAC 签名 cookie 会话
-    permission.ts            # requireUser / requirePerm
+    db.js                    # 内存数据库（进程内单例）
+    session.js               # HMAC 签名 cookie 会话
+    permission.js            # requireUser / requirePerm
+    audit.js                 # writeLog：写操作日志
+    category.js              # 分类参数校验
+    product.js               # 商品参数校验 + 变更文案
 ```
 
 ## 开发路线
@@ -94,11 +101,20 @@ server/
 - [x] 后台布局（侧边栏 + 顶栏 + 当前用户 / 退出）
 - [x] 商品列表、商品编辑、分类管理、操作日志、权限管理页面
 - [x] 服务端会话与 `requireUser` / `requirePerm` 权限关卡
-- [x] 分类接口（增删改查 + 权限校验 + 操作日志，删除时商品移入「未分类」）
-- [ ] 商品 / 日志 / 角色写接口（商品页目前仍读种子数据）
+- [x] 分类接口（增删改查 + 权限校验 + 操作日志，删除时商品移入「待分类」）
+- [x] 商品接口（分页筛选 + 详情 + 编辑 + 上下架 + 删除，写操作落日志）
+- [x] 商品列表页接入真实接口（筛选/分页合并成 `query`，上下架与删除走 `useApi`）
+- [x] 商品详情页接入真实接口（SSR 取数、404 → 错误页、草稿/脏状态、保存后清列表缓存）
+- [x] 日志页接入真实接口（`useAsyncData('logs')` + `api.logs.list`，筛选/分页全走服务端）
 - [ ] 权限管理页保存后写回服务端角色表
+- [ ] 新建商品（`POST /api/products`）
 
 ## 说明
 
-- 商品、分类、日志、角色数据当前来自 `shared/seed.ts`，写操作只在页面内存中生效，刷新还原；服务端内存库同样重启重置。
-- `el-table` 的数据行不做 SSR，服务端返回的 HTML 中表格为空属正常，由客户端 hydration 填充。
+- 分类、商品、操作日志已走服务端接口；权限管理页仍读 `shared/seed.js`，其写操作只在页面内存中生效，刷新还原。服务端内存库重启同样回到种子状态。
+- 所有接口调用统一走 `app/composables/useApi.js`（全项目唯一写 URL 的地方）。事件回调用 `useApi()`，可能跑在 SSR 的地方用 `useApi(useRequestFetch())`；`useAsyncData` 不进封装，留在页面里配 key/watch。
+- 商品列表的筛选与分页只存在页面内存中，不写入 URL；刷新页面会回到默认视图（全部商品、第一页）。日志页同理。
+- 日志页是纯只读：没有乐观更新，筛选/翻页/改每页条数都只靠 `query` 变化触发重新取数；改每页条数会回到第 1 页，避免页码越界后表格空白。
+- Element Plus 未配置 `zh-cn` locale，分页器每页条数显示为 `8/page`（商品页同样如此）。
+- 商品详情页保存成功后会 `clearNuxtData('products')`，避免返回列表时命中保存前的旧快照。
+- `el-table` 的数据行不做 SSR，服务端返回的 HTML 中表格为空属正常，数据由 payload 在客户端 hydration 时填充。
