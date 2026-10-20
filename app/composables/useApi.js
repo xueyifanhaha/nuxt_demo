@@ -92,6 +92,11 @@ export function useApi(fetcher = $fetch) {
     me: () => call('获取当前用户', '/api/auth/me'),
   }
 
+  const roles = {
+    list: () => call('查询角色', '/api/roles'),
+    update: (level, permissions) => call('保存角色权限', `/api/roles/${level}`, { method: 'PUT', body: { permissions } }),
+  }
+
   const logs = {
     list: query => call('查询日志', '/api/logs', { query }),
   }
@@ -101,6 +106,7 @@ export function useApi(fetcher = $fetch) {
     raw: (url, options = {}) => call('请求', url, options),
     products,
     categories,
+    roles,
     auth,
     logs,
   }

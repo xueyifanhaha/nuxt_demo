@@ -6,7 +6,19 @@ import { PERMISSION_GROUPS, ROLE_PRESETS } from '#shared/permissions'
 definePageMeta({ layout: 'default' })
 useHead({ title: '权限管理 · 商品运营后台' })
 
-const { roles } = usePermission()
+/**
+ * 本页会 SSR（首屏直出矩阵），api 必须用 useRequestFetch 创建，服务端才能带上 cookie。
+ * 角色数据只有本页用，直接在这里取，不再放 usePermission 的共享 state。
+ */
+const api = useApi(useRequestFetch())
+
+const { data: rolesData } = await useAsyncData(
+  'roles',
+  () => api.roles.list(),
+)
+
+/** 已保存的角色（服务端为准），draft 与它比较得出「是否有未保存修改」 */
+const savedRoles = computed(() => rolesData.value?.items ?? [])
 
 /** 矩阵列：1 级锁定全选，2/3 级可编辑 */
 const LEVELS = [
@@ -15,8 +27,8 @@ const LEVELS = [
   { level: 3, label: '3 级 · 只读', locked: false },
 ]
 
-/** 草稿：{ 1: [...], 2: [...], 3: [...] }，与 roles 状态比较得出「是否有未保存修改」 */
-const draft = reactive(Object.fromEntries(roles.value.map(r => [r.level, [...r.permissions]])))
+/** 草稿：{ 1: [...], 2: [...], 3: [...] } */
+const draft = reactive(Object.fromEntries(savedRoles.value.map(r => [r.level, [...r.permissions]])))
 
 function isChecked(level, perm) {
   return draft[level]?.includes(perm) ?? false
@@ -30,13 +42,17 @@ function toggle(level, perm) {
   else list.push(perm)
 }
 
-/** 与已保存状态对比，有差异才亮保存按钮 */
-const dirty = computed(() =>
-  roles.value.some(r =>
-    r.permissions.length !== draft[r.level]?.length
-    || r.permissions.some(p => !draft[r.level]?.includes(p)),
-  ),
+/** 与已保存版本不一致的角色级别，保存时逐个提交 */
+const changedLevels = computed(() =>
+  savedRoles.value
+    .filter((r) => {
+      const d = draft[r.level] ?? []
+      return r.permissions.length !== d.length || r.permissions.some(p => !d.includes(p))
+    })
+    .map(r => r.level),
 )
+
+const dirty = computed(() => changedLevels.value.length > 0)
 
 /** 规则：2/3 级至少保留「查看商品」，否则整级变空白后台（黄色提示，不阻止保存） */
 const emptyRisk = computed(() =>
@@ -45,24 +61,37 @@ const emptyRisk = computed(() =>
 
 const saving = ref(false)
 
-function save() {
+async function save() {
+  if (changedLevels.value.length === 0) return
   saving.value = true
-  // 假保存：接口阶段换成 PUT /api/roles/:level，服务端写库并记操作日志
-  setTimeout(() => {
-    roles.value = roles.value.map(r => ({ ...r, permissions: [...(draft[r.level] ?? [])] }))
+  try {
+    for (const level of changedLevels.value) {
+      const { item } = await api.roles.update(level, draft[level])
+      // useAsyncData 的 data 是 shallowRef，深层改动不触发更新；
+      // 与商品列表页 patchItem 同款手法，整体换新数组
+      rolesData.value = {
+        items: rolesData.value.items.map(r => (r.level === level ? item : r)),
+      }
+    }
+    ElMessage.success('权限已保存：相关角色用户的下一次请求即按新权限校验，在线用户重新登录后界面同步')
+  }
+  catch (err) {
+    // 部分成功时已落库的级别保留，失败的留在草稿里，可直接重试
+    ElMessage.error(err.bizMessage)
+  }
+  finally {
     saving.value = false
-    ElMessage.success('权限已保存，立即生效（导航、按钮、页面三层同步）')
-  }, 400)
+  }
 }
 
 /** 放弃未保存的修改，回到已保存状态 */
 function discard() {
-  for (const r of roles.value) {
+  for (const r of savedRoles.value) {
     draft[r.level] = [...r.permissions]
   }
 }
 
-/** 恢复种子角色预设 */
+/** 恢复种子角色预设（只是草稿操作，要点保存才会落库） */
 function resetToPreset() {
   for (const r of structuredClone(ROLE_PRESETS)) {
     draft[r.level] = [...r.permissions]
@@ -75,7 +104,7 @@ function resetToPreset() {
     <div class="page-head">
       <div>
         <h1>权限管理</h1>
-        <p>勾选每个角色拥有的权限点，保存后立即生效 · 1 级管理员固定全量权限，不可修改</p>
+        <p>勾选每个角色拥有的权限点，保存后相关角色用户的下一次请求即按新权限校验 · 1 级管理员固定全量权限，不可修改</p>
       </div>
       <div class="head-actions">
         <el-button :icon="Refresh" :disabled="!dirty" @click="resetToPreset">恢复默认</el-button>
@@ -131,7 +160,7 @@ function resetToPreset() {
 
     <p class="foot-hint">
       权限模型：角色 → 权限点。导航按权限过滤、页面由路由守卫拦截、按钮按权限渲染、接口由服务端校验——
-      修改这里的勾选后，前三层立即反映，接口层在接入后由服务端每次请求实时读取。
+      保存后服务端立即按新矩阵校验；在线用户界面上的导航与按钮来自登录时下发的权限快照，重新登录后同步。
     </p>
   </div>
 </template>
