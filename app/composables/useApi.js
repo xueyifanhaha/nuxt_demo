@@ -73,6 +73,7 @@ export function useApi(fetcher = $fetch) {
   const products = {
     list: query => call('查询商品', '/api/products', { query }),
     detail: id => call('查询商品', `/api/products/${id}`),
+    create: body => call('新建商品', '/api/products', { method: 'POST', body }),
     update: (id, body) => call('保存商品', `/api/products/${id}`, { method: 'PUT', body }),
     updateStatus: (id, status) => call('上下架', `/api/products/${id}/status`, { method: 'PUT', body: { status } }),
     remove: id => call('删除商品', `/api/products/${id}`, { method: 'DELETE' }),

@@ -4,11 +4,20 @@ import { ArrowLeft } from '@element-plus/icons-vue'
 import { PERM } from '#shared/permissions'
 
 definePageMeta({ layout: 'default' })
-useHead({ title: '商品编辑 · 商品运营后台' })
 
 const route = useRoute()
 const router = useRouter()
 const { can } = usePermission()
+
+/**
+ * 新建与编辑共用这一个页面：/products/new 命中 [id].vue，id 是字符串 'new'。
+ * 真正的商品 id 永远是数字，所以 'new' 不会和任何商品撞车。
+ */
+const isNew = computed(() => route.params.id === 'new')
+
+useHead({
+  title: computed(() => `${isNew.value ? '新建商品' : '商品编辑'} · 商品运营后台`),
+})
 
 /**
  * 详情页可能跑在 SSR（首屏直出），所以 api 必须用 useRequestFetch 建：
@@ -28,7 +37,7 @@ const productKey = computed(() => `product-${route.params.id}`)
 
 const { data: productData, error: loadError } = await useAsyncData(
   productKey,
-  () => api.products.detail(route.params.id),
+  () => (isNew.value ? { item: null } : api.products.detail(route.params.id)),
 )
 
 /**
@@ -58,9 +67,15 @@ const saving = ref(false)
 
 /**
  * 兜底空表单：商品为 null（加载失败）时用它初始化，避免读 null.name 直接崩。
- * 页面模板有 v-if="product" 守着，所以这个空表单不会被渲染出去。
+ * 页面模板有 v-if 守着，所以这个空表单不会被渲染出去。
  */
 const EMPTY_FORM = { name: '', categoryId: undefined, price: 0, stock: 0, description: '' }
+
+/**
+ * 新建时的初始草稿：价格与库存留空（undefined）而不是 0。
+ * 0 能通过 required 校验，会让「没填价格」被当成「卖 0 元」提交。
+ */
+const NEW_FORM = { name: '', categoryId: undefined, price: undefined, stock: undefined, description: '' }
 
 /** 把服务端对象映射成表单字段；字段白名单显式写出，避免把 sku/updatedAt 一起塞进 body */
 function toForm(source) {
@@ -74,8 +89,8 @@ function toForm(source) {
   }
 }
 
-/** 草稿态。首屏 productData 已就绪（上面 await 过），所以这里拿到的是真实值 */
-const form = reactive(toForm(product.value))
+/** 草稿态。编辑时首屏 productData 已就绪（上面 await 过），新建时是一张空表 */
+const form = reactive(isNew.value ? { ...NEW_FORM } : toForm(product.value))
 
 const rules = {
   name: [
@@ -106,6 +121,22 @@ async function save() {
 
   saving.value = true
   try {
+    if (isNew.value) {
+      // POST 只收白名单字段；id / sku / status / 时间戳全由服务端生成
+      const { item } = await api.products.create({ ...form })
+      syncProduct(item)
+      clearNuxtData('products')
+
+      ElMessage.success(`商品已创建（${item.sku}）`)
+
+      /**
+       * replace 而不是 push：创建完地址栏应该直接是商品详情，
+       * 不能让「后退」回到那张已经提交过的空表单。
+       */
+      await navigateTo(`/products/${item.id}`, { replace: true })
+      return
+    }
+
     // PUT 是全量替换，body 只放白名单字段（sku / status 由服务端维护）
     const { item } = await api.products.update(route.params.id, { ...form })
     syncProduct(item)
@@ -153,15 +184,15 @@ const categoryName = computed(
 </script>
 
 <template>
-  <div v-if="product" class="page">
+  <div v-if="product || isNew" class="page">
     <div class="page-head">
       <div class="head-left">
         <NuxtLink to="/products" class="back">
           <el-icon :size="14"><ArrowLeft /></el-icon>
           返回列表
         </NuxtLink>
-        <h1>{{ form.name || '商品编辑' }}</h1>
-        <p class="head-meta">
+        <h1>{{ form.name || (isNew ? '新建商品' : '商品编辑') }}</h1>
+        <p v-if="product" class="head-meta">
           <span>{{ product.sku }}</span>
           <i>/</i>
           <span>{{ categoryName }}</span>
@@ -170,12 +201,15 @@ const categoryName = computed(
             {{ product.status === 'on' ? '已上架' : '已下架' }}
           </el-tag>
         </p>
+        <p v-else class="head-meta">
+          <span>保存后自动生成 SKU，初始状态为「下架」</span>
+        </p>
       </div>
 
       <div v-if="canEdit" class="head-actions">
-        <el-button @click="cancel">取消</el-button>
+        <el-button @click="cancel">返回</el-button>
         <el-button type="primary" :loading="saving" @click="save">
-          保存修改
+          {{ isNew ? '创建商品' : '保存修改' }}
         </el-button>
       </div>
     </div>
@@ -263,7 +297,7 @@ const categoryName = computed(
             </p>
           </section>
 
-          <section class="card">
+          <section v-if="product" class="card">
             <h2>其他信息</h2>
             <div class="meta-row">
               <span>SKU</span>

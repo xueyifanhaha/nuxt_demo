@@ -119,8 +119,12 @@ function money(value) {
   return value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+/**
+ * 新建走同一个详情页组件，路由是 /products/new（命中 [id].vue，id 为字符串 'new'）。
+ * 不另开 new.vue：表单、校验、布局、分类下拉全都一样，复制一份只会两边不同步。
+ */
 function onCreate() {
-  ElMessage.info('新建商品还没接：需要先加 POST /api/products')
+  navigateTo('/products/new')
 }
 
 function onEdit(row) {

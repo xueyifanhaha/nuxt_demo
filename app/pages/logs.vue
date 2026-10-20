@@ -15,6 +15,7 @@ const api = useApi(useRequestFetch())
 /** 动作类型 → 展示文案与标签色（和服务端写日志用的 action 字符串一一对应） */
 const ACTION_META = {
   login: { label: '登录', tag: 'info' },
+  'product:create': { label: '新建商品', tag: 'success' },
   'product:update': { label: '编辑商品', tag: 'primary' },
   'product:status': { label: '上下架', tag: 'warning' },
   'product:delete': { label: '删除商品', tag: 'danger' },
