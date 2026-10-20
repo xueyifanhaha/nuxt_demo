@@ -2,45 +2,80 @@
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { PERM } from '#shared/permissions'
-import { SEED_PRODUCTS } from '#shared/seed'
 
 definePageMeta({ layout: 'default' })
 useHead({ title: '商品编辑 · 商品运营后台' })
 
 const route = useRoute()
-const id = route.params.id
+const router = useRouter()
+const { can } = usePermission()
 
-/* 分类读服务端，新建的分类能直接选到（商品数据下一步接接口） */
-const requestFetch = useRequestFetch()
+/**
+ * 详情页可能跑在 SSR（首屏直出），所以 api 必须用 useRequestFetch 建：
+ * 服务端没有浏览器的 cookie，靠它把当前请求的 Cookie 转发过去。
+ */
+const api = useApi(useRequestFetch())
+
+/* ---------- 分类下拉 ---------- */
 const { data: categoryData } = await useAsyncData(
   'categories-for-product-edit',
-  () => requestFetch('/api/categories'),
+  () => api.categories.list(),
 )
 const categories = computed(() => categoryData.value?.items ?? [])
 
-/* 静态阶段从种子数据里找；接接口后换成 GET /api/products/:id */
-const product = SEED_PRODUCTS.find(item => String(item.id) === id)
+/* ---------- 商品详情 ---------- */
+const productKey = computed(() => `product-${route.params.id}`)
 
-// 找不到直接抛给 error.vue，顺便演示 404 链路
-if (!product) {
-  throw createError({ statusCode: 404, statusMessage: '商品不存在', fatal: true })
+const { data: productData, error: loadError } = await useAsyncData(
+  productKey,
+  () => api.products.detail(route.params.id),
+)
+
+/**
+ * useAsyncData 把 4xx 收进 error 而不抛。这里手动转成页面级错误交给 error.vue。
+ *
+ * 用 import.meta.server 守卫：这段代码 SSR 和客户端 hydration 各执行一次，
+ * 不守卫的话会抛两次（客户端那次还会刷一条控制台错误）。
+ * 只让服务端那次抛，客户端直接复用 SSR 出来的错误页。
+ */
+if (import.meta.server && loadError.value) {
+  throw createError({
+    statusCode: loadError.value.statusCode ?? 500,
+    statusMessage: loadError.value.data?.data?.message ?? '商品加载失败',
+    fatal: true,
+  })
 }
 
-const { can } = usePermission()
-/** 此页进入条件就是 product:edit；无权限会在中间件层直接 403，这里只是兜底 */
+const product = computed(() => productData.value?.item ?? null)
+
+/** 进入本页的条件是 product:edit；无权限在中间件层已 403，这里只是无 JS 兜底 */
 const canEdit = computed(() => can(PERM.PRODUCT_EDIT))
+
+/* ---------- 表单：草稿直接由服务端对象初始化 ---------- */
 
 const formRef = ref()
 const saving = ref(false)
 
-const form = reactive({
-  name: product.name,
-  categoryId: product.categoryId,
-  price: product.price,
-  stock: product.stock,
-  status: product.status,
-  description: product.description,
-})
+/**
+ * 兜底空表单：商品为 null（加载失败）时用它初始化，避免读 null.name 直接崩。
+ * 页面模板有 v-if="product" 守着，所以这个空表单不会被渲染出去。
+ */
+const EMPTY_FORM = { name: '', categoryId: undefined, price: 0, stock: 0, description: '' }
+
+/** 把服务端对象映射成表单字段；字段白名单显式写出，避免把 sku/updatedAt 一起塞进 body */
+function toForm(source) {
+  if (!source) return { ...EMPTY_FORM }
+  return {
+    name: source.name,
+    categoryId: source.categoryId,
+    price: source.price,
+    stock: source.stock,
+    description: source.description ?? '',
+  }
+}
+
+/** 草稿态。首屏 productData 已就绪（上面 await 过），所以这里拿到的是真实值 */
+const form = reactive(toForm(product.value))
 
 const rules = {
   name: [
@@ -52,7 +87,17 @@ const rules = {
   stock: [{ required: true, message: '请填写库存', trigger: 'blur' }],
 }
 
-/* ---------- 保存 / 重置 ---------- */
+/**
+ * 保存成功后用服务端返回的对象刷新页面数据与草稿。
+ * 本页不做脏值追踪（取消即离开），因此不需要再维护一份「已保存快照」。
+ */
+function syncProduct(item) {
+  productData.value = { item }
+  Object.assign(form, toForm(item))
+  formRef.value?.clearValidate()
+}
+
+/* ---------- 保存 / 取消 ---------- */
 async function save() {
   if (!formRef.value) return
 
@@ -60,21 +105,46 @@ async function save() {
   if (!valid) return
 
   saving.value = true
-  // 静态页面：接口接入后替换为 PUT /api/products/:id
-  setTimeout(() => {
+  try {
+    // PUT 是全量替换，body 只放白名单字段（sku / status 由服务端维护）
+    const { item } = await api.products.update(route.params.id, { ...form })
+    syncProduct(item)
+
+    /**
+     * 列表页的 useAsyncData key 是 'products'，它可能还挂在内存里带着旧数据。
+     * 清掉它的 payload 缓存与实例状态，下次进列表页会重新取数，
+     * 不会立刻拿到保存前的旧快照。
+     *
+     * 用 clearNuxtData 而不是 refreshNuxtData：列表页此刻没挂载，
+     * 没必要为了"顺手刷新"发一笔没人看的请求。
+     */
+    clearNuxtData('products')
+
+    ElMessage.success('商品已保存')
+  }
+  catch (err) {
+    ElMessage.error(err.bizMessage)
+  }
+  finally {
     saving.value = false
-    ElMessage.success('校验通过，保存接口下一步接入')
-  }, 400)
+  }
 }
 
-function resetForm() {
-  form.name = product.name
-  form.categoryId = product.categoryId
-  form.price = product.price
-  form.stock = product.stock
-  form.status = product.status
-  form.description = product.description
-  formRef.value?.clearValidate()
+/**
+ * 取消：直接返回上一级，不做任何回滚（本来就没有本地快照要回滚）。
+ *
+ * 判断依据是 vue-router 写在历史记录里的 `state.back`：
+ * - 站内跳进来（列表 → 详情）→ `back` 是上一页的路径，可以退；
+ * - 从地址栏、书签、新标签直接打开 → `back` 是 null，此时 router.back()
+ *   要么没反应、要么把人退出站（实测会回到 about:blank）。
+ * 用 history.length 判断不可靠：直开时它也可能是 1，但并不代表能退。
+ */
+function cancel() {
+  if (import.meta.client && window.history.state?.back) {
+    router.back()
+    return
+  }
+  navigateTo('/products')
 }
 
 const categoryName = computed(
@@ -83,7 +153,7 @@ const categoryName = computed(
 </script>
 
 <template>
-  <div class="page">
+  <div v-if="product" class="page">
     <div class="page-head">
       <div class="head-left">
         <NuxtLink to="/products" class="back">
@@ -96,15 +166,17 @@ const categoryName = computed(
           <i>/</i>
           <span>{{ categoryName }}</span>
           <i>/</i>
-          <el-tag :type="form.status === 'on' ? 'success' : 'info'" size="small" effect="light">
-            {{ form.status === 'on' ? '已上架' : '已下架' }}
+          <el-tag :type="product.status === 'on' ? 'success' : 'info'" size="small" effect="light">
+            {{ product.status === 'on' ? '已上架' : '已下架' }}
           </el-tag>
         </p>
       </div>
 
       <div v-if="canEdit" class="head-actions">
-        <el-button @click="resetForm">重置</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存修改</el-button>
+        <el-button @click="cancel">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="save">
+          保存修改
+        </el-button>
       </div>
     </div>
 
@@ -114,8 +186,8 @@ const categoryName = computed(
       type="warning"
       :closable="false"
       show-icon
-      title="当前预览角色没有编辑权限"
-      description="商品编辑页需要 product:edit 权限。接入路由守卫后，无权限角色访问此页将被直接拦截到 403，表单整体只读只是静态阶段的兜底展示。"
+      title="当前账号没有编辑权限"
+      description="商品编辑页需要 product:edit 权限。路由守卫已会在进入前拦截，这里只是无 JS 场景下的兜底展示。"
     />
 
     <el-form

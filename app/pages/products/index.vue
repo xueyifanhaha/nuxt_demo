@@ -2,14 +2,13 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { PERM } from '#shared/permissions'
-import { SEED_PRODUCTS } from '#shared/seed'
 
 definePageMeta({ layout: 'default' })
 useHead({ title: '商品管理 · 商品运营后台' })
 
 const { can, role } = usePermission()
 
-/* 分类读服务端：新建的分类立刻能在这里筛到（商品数据下一步接接口） */
+/* 分类读服务端：新增的分类立刻能在这里筛到 */
 const requestFetch = useRequestFetch()
 const { data: categoryData } = await useAsyncData(
   'categories-for-products',
@@ -17,64 +16,91 @@ const { data: categoryData } = await useAsyncData(
 )
 const CATEGORIES = computed(() => categoryData.value?.items ?? [])
 
-/** 本地可变副本：上下架、删除直接改这里，接口阶段换成对应请求 */
-const products = ref([...SEED_PRODUCTS])
+/* ---------- 筛选条件与分页 ---------- */
 
-/* ---------- 筛选与分页（暂时在本地算，接接口后改成 query 参数） ---------- */
+/** 三个筛选条件放在一起，空值表示不筛 */
 const filters = reactive({
   categoryId: undefined,
   status: undefined,
-  q: '',
+  keyword: '',
 })
 
-/** 关键词草稿：点「搜索」或回车才应用到 filters.q */
-const draftQ = ref('')
-
-function applySearch() {
-  filters.q = draftQ.value.trim()
-  page.value = 1
-}
-
-const page = ref(1)
-const pageSize = ref(8)
-
-const filtered = computed(() => {
-  const keyword = filters.q.trim().toLowerCase()
-  // 未分类 id 是 0，清空下拉可能是 ''/undefined/null，统一按「没有筛选条件」处理
-  const hasCategory = filters.categoryId !== undefined
-    && filters.categoryId !== null
-    && filters.categoryId !== ''
-
-  return products.value.filter((item) => {
-    if (hasCategory && item.categoryId !== filters.categoryId) return false
-    if (filters.status && item.status !== filters.status) return false
-    if (keyword && !`${item.name} ${item.sku}`.toLowerCase().includes(keyword)) return false
-    return true
-  })
+/** 分页状态放在一起：页码 + 每页条数 */
+const pager = reactive({
+  page: 1,
+  pageSize: 8,
 })
 
-const paged = computed(() => {
-  const start = (page.value - 1) * pageSize.value
-  return filtered.value.slice(start, start + pageSize.value)
+/**
+ * 查询条件：分页与筛选合并成一个普通对象。
+ * - `...pager` 展开 page / pageSize，`...rest` 展开 categoryId / status；
+ * - 空值统一取 undefined，序列化时会被直接丢掉（不会出现 `q=`、`categoryId=undefined`）；
+ * - 接口参数名是 q，前端字段叫 keyword，这里做一次映射。
+ */
+const query = computed(() => {
+  const { keyword, ...rest } = filters
+  return {
+    ...pager,
+    ...rest,
+    q: keyword.trim() || undefined,
+  }
 })
 
-watch(
-  [() => filters.categoryId, () => filters.status, () => filters.q],
-  () => {
-    page.value = 1
-  },
+/**
+ * key 固定为 'products'：条件变化不再靠换 key 触发，而是 watch 上面那个 query。
+ * 两者效果一样（都会重新取数，且默认 dedupe: 'cancel' 会中断上一笔），
+ * 但 key 固定后 payload 稳定、意图更直白。
+ */
+const { data: productData, pending, error, refresh } = await useAsyncData(
+  'products',
+  () => requestFetch('/api/products', { query: query.value }),
+  { watch: [query] },
 )
 
-watch(pageSize, () => {
-  page.value = 1
-})
+const items = computed(() => productData.value?.items ?? [])
+const total = computed(() => productData.value?.total ?? 0)
+
+/**
+ * 上下架成功后的乐观更新：同时改两个地方。
+ * - `productData.value`（shallowRef）→ 表格那一行立刻变
+ * - `nuxtApp.payload.data.products` → payload 也变，否则后续 refresh 会拿旧 payload 覆盖回来
+ *   （in-flight 之后的刷新会命中 payload 缓存，这也是本项目「开关弹回原状」的真正原因）
+ */
+function patchItem(next) {
+  if (!productData.value) return
+
+  const patched = {
+    ...productData.value,
+    items: productData.value.items.map(item => (item.id === next.id ? next : item)),
+  }
+  productData.value = patched
+
+  const payload = useNuxtApp().payload
+  if (payload?.data?.products) payload.data.products = patched
+}
+
+/**
+ * 首屏取数失败时的提示。这里的 error 是 useAsyncData 的 NuxtError（不是 useApi 抛的），
+ * 形状一样是 body 挂在 data 上，所以沿用同一套兜底顺序。
+ */
+const loadErrorText = computed(() =>
+  error.value?.data?.data?.message
+  ?? error.value?.data?.message
+  ?? error.value?.statusMessage
+  ?? '请确认登录状态后重试',
+)
+
+/** 条件一变就回第一页，否则会停在新结果里不存在的页码上 */
+function applySearch() {
+  pager.page = 1
+}
 
 function resetFilters() {
   filters.categoryId = undefined
   filters.status = undefined
-  filters.q = ''
-  draftQ.value = ''
-  page.value = 1
+  filters.keyword = ''
+  pager.page = 1
+  pager.pageSize = 8
 }
 
 /* ---------- 展示辅助 ---------- */
@@ -93,16 +119,8 @@ function money(value) {
   return value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-/* 分类对应的缩略图底色（列表页占位用，图片字段接入后可换成真图缩略） */
-const TONES = {
-  1: '#eef3fe',
-  2: '#f1f0fe',
-  3: '#eaf6f0',
-  4: '#fdf3e7',
-}
-
 function onCreate() {
-  ElMessage.info('新建商品：与编辑页共用表单，接口阶段一起接')
+  ElMessage.info('新建商品还没接：需要先加 POST /api/products')
 }
 
 function onEdit(row) {
@@ -112,28 +130,72 @@ function onEdit(row) {
 /* ---------- 上下架：列表内直接切换（权限 product:status） ---------- */
 const switchingId = ref(null)
 
-function onToggleStatus(row, value) {
+/**
+ * 事件回调一律跑在浏览器，所以直接 useApi()（内部用 $fetch，同源请求自带 cookie）。
+ * 页面首屏那次取数仍走上面的 useAsyncData + useRequestFetch —— 那条链路可能跑在服务端。
+ */
+const api = useApi()
+
+async function onToggleStatus(row, value) {
   switchingId.value = row.id
-  // 假请求：接口阶段换成 PUT /api/products/:id/status
-  setTimeout(() => {
-    row.status = value
+  try {
+    const { item } = await api.products.updateStatus(row.id, value)
+
+    if (filters.status) {
+      // 有状态筛选时，改完状态的这一行已经不属于当前结果集（total 也变了），只能重新取数
+      await refresh()
+      if (items.value.length === 0 && pager.page > 1) pager.page -= 1
+    }
+    else {
+      patchItem(item)
+    }
+
+    ElMessage.success(`「${item.name}」已${value === 'on' ? '上架' : '下架'}`)
+    return true
+  }
+  catch (err) {
+    // bizMessage 由 useApi 统一收敛（服务端中文文案 → 兜底文案），页面只负责展示
+    ElMessage.error(err.bizMessage)
+    return false
+  }
+  finally {
     switchingId.value = null
-    ElMessage.success(`「${row.name}」已${value === 'on' ? '上架' : '下架'}`)
-  }, 300)
+  }
 }
 
-function onDelete(row) {
-  ElMessageBox.confirm(`确定删除商品「${row.name}」吗？删除后不可恢复。`, '删除确认', {
-    type: 'warning',
-    confirmButtonText: '删除',
-    cancelButtonText: '取消',
-  })
-    .then(() => {
-      // 假删除：接口阶段换成 DELETE /api/products/:id
-      products.value = products.value.filter(item => item.id !== row.id)
-      ElMessage.success(`已删除「${row.name}」`)
+/**
+ * el-switch 的 before-change 只负责「这次改动要不要放行」，不负责选值：
+ * 成功返回 true → 组件把 modelValue 改到新值；返回 false → 开关弹回原状。
+ *
+ * 注意 before-change 拿不到目标值（Element Plus 只传个空参），所以这里自己算：
+ * 当前是 'on' 就切成 'off'，反之亦然。
+ */
+function beforeToggleStatus(row) {
+  return onToggleStatus(row, row.status === 'on' ? 'off' : 'on')
+}
+
+async function onDelete(row) {
+  try {
+    await ElMessageBox.confirm(`确定删除商品「${row.name}」吗？删除后不可恢复。`, '删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
     })
-    .catch(() => {})
+  }
+  catch {
+    return // 用户取消
+  }
+
+  try {
+    await api.products.remove(row.id)
+    ElMessage.success(`已删除「${row.name}」`)
+    // 删掉当前页最后一条时回退一页，否则停在空页上
+    if (items.value.length === 1 && pager.page > 1) pager.page -= 1
+    else await refresh()
+  }
+  catch (err) {
+    ElMessage.error(err.bizMessage)
+  }
 }
 </script>
 
@@ -143,7 +205,7 @@ function onDelete(row) {
       <div>
         <h1>商品管理</h1>
         <p>
-          共 {{ filtered.length }} 件商品 · 当前身份 {{ role.level }} 级 {{ role.label }}
+          共 {{ total }} 件商品 · 当前身份 {{ role.level }} 级 {{ role.label }}
         </p>
       </div>
       <el-button v-if="can(PERM.PRODUCT_EDIT)" type="primary" :icon="Plus" @click="onCreate">
@@ -153,23 +215,31 @@ function onDelete(row) {
 
     <section class="card filter">
       <div class="filter-left">
-        <el-select v-model="filters.categoryId" placeholder="全部分类" clearable class="w-150">
+        <el-select
+          v-model="filters.categoryId"
+          placeholder="全部分类"
+          clearable
+          class="w-150"
+        >
           <el-option v-for="item in CATEGORIES" :key="item.id" :label="item.name" :value="item.id" />
         </el-select>
 
-        <el-select v-model="filters.status" placeholder="全部状态" clearable class="w-130">
+        <el-select
+          v-model="filters.status"
+          placeholder="全部状态"
+          clearable
+          class="w-130"
+        >
           <el-option label="已上架" value="on" />
           <el-option label="已下架" value="off" />
         </el-select>
 
         <el-input
-          v-model="draftQ"
+          v-model="filters.keyword"
           placeholder="搜索名称或 SKU"
           :prefix-icon="Search"
           clearable
           class="w-200"
-          @keyup.enter="applySearch"
-          @clear="applySearch"
         />
       </div>
 
@@ -179,8 +249,24 @@ function onDelete(row) {
       </div>
     </section>
 
-    <section class="card table-card">
-      <el-table :data="paged" :header-cell-style="headerStyle" empty-text="没有匹配的商品">
+    <section v-if="error" class="card error-card">
+      <el-alert
+        type="error"
+        :closable="false"
+        show-icon
+        title="商品加载失败"
+        :description="loadErrorText"
+      />
+      <el-button class="retry" size="small" @click="refresh()">重新加载</el-button>
+    </section>
+
+    <section v-else class="card table-card">
+      <el-table
+        v-loading="pending"
+        :data="items"
+        :header-cell-style="headerStyle"
+        empty-text="没有匹配的商品"
+      >
         <el-table-column label="商品" min-width="280">
           <template #default="{ row }">
             <div class="cell-product">
@@ -221,7 +307,7 @@ function onDelete(row) {
               inactive-text="下架"
               class="status-switch"
               :loading="switchingId === row.id"
-              @change="value => onToggleStatus(row, value)"
+              :before-change="() => beforeToggleStatus(row)"
             />
             <el-tag v-else :type="row.status === 'on' ? 'success' : 'info'" size="small" effect="light">
               {{ row.status === 'on' ? '已上架' : '已下架' }}
@@ -245,11 +331,11 @@ function onDelete(row) {
       </el-table>
 
       <div class="table-foot">
-        <span class="hint">共 {{ filtered.length }} 条</span>
+        <span class="hint">共 {{ total }} 条</span>
         <el-pagination
-          v-model:current-page="page"
-          v-model:page-size="pageSize"
-          :total="filtered.length"
+          v-model:current-page="pager.page"
+          v-model:page-size="pager.pageSize"
+          :total="total"
           :page-sizes="[5, 8, 12]"
           layout="sizes, prev, pager, next"
           background
@@ -284,6 +370,18 @@ function onDelete(row) {
   background: var(--app-surface);
   border: 1px solid var(--app-border);
   border-radius: 12px;
+}
+
+.error-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+}
+
+.retry {
+  flex-shrink: 0;
 }
 
 .filter {
