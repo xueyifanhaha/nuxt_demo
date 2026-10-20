@@ -42,6 +42,7 @@ function seedUsers() {
 function createDb() {
   let logSeq = Math.max(...SEED_LOGS.map(l => l.id)) + 1
   let productSeq = Math.max(...SEED_PRODUCTS.map(p => p.id)) + 1
+  let skuSeq = Math.max(...SEED_PRODUCTS.map(p => Number(/^SP-(\d+)$/.exec(p.sku)?.[1] ?? 0))) + 1
   let categorySeq = Math.max(...SEED_CATEGORIES.map(c => c.id)) + 1
 
   return {
@@ -112,6 +113,33 @@ function createDb() {
     },
     nextProductId() {
       return productSeq++
+    },
+    /**
+     * SKU 用独立的递增序列，不从现有商品里取最大值：
+     * 商品能被删除，取最大值会在「删掉 SKU 最大的那条」之后立刻复用它的 SKU，
+     * 而 SKU 一旦对外曝光（打单、库存表）就不该再指到别的商品。
+     */
+    nextSku() {
+      return `SP-${skuSeq++}`
+    },
+    /** 新建商品：id / sku / 时间戳由库生成，status 由接口层决定 */
+    createProduct(fields) {
+      const now = formatNow()
+      const product = {
+        id: this.nextProductId(),
+        sku: this.nextSku(),
+        name: fields.name,
+        categoryId: fields.categoryId,
+        price: fields.price,
+        stock: fields.stock,
+        status: fields.status ?? 'off',
+        description: fields.description ?? '',
+        createdAt: now,
+        updatedAt: now,
+        updatedBy: fields.updatedBy ?? null,
+      }
+      this.products.push(product)
+      return product
     },
     updateProduct(id, patch) {
       const product = this.findProduct(id)
