@@ -7,7 +7,7 @@ import { writeLog } from '../../utils/audit'
 
 /**
  * DELETE /api/categories/:id —— 删除分类（category:edit）
- * 分类下还有商品也允许删除：这些商品先移到系统分类「未分类」，再删分类。
+ * 分类下还有商品也允许删除：这些商品先移到系统分类「待分类」，再删分类。
  * 前端会在确认框里提示将迁移的商品数量。
  */
 export default defineEventHandler((event) => {
@@ -29,7 +29,7 @@ export default defineEventHandler((event) => {
     targetType: '分类',
     targetId: id,
     targetName: removed.name,
-    detail: moved > 0 ? `删除分类，${moved} 件商品移入「未分类」` : '删除分类（无关联商品）',
+    detail: moved > 0 ? `删除分类，${moved} 件商品移入「待分类」` : '删除分类（无关联商品）',
   })
 
   return { ok: true, moved }

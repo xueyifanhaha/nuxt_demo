@@ -1,12 +1,16 @@
 // 种子数据：服务端 db 的初始数据（前端已全部改为读接口）
 
-/** 系统分类「未分类」的固定 id：删除分类时商品自动归入这里，不可编辑 / 删除 */
-export const UNCATEGORIZED_ID = 0
+/**
+ * 系统分类「待分类」的固定 id。
+ * 用 -1 而不是 0：0 是 falsy，写成 `if (categoryId)` 会被当成「没选分类」；
+ * 负数天然是真值，判断时不用时时刻刻提防这个特例。
+ */
+export const PENDING_CATEGORY_ID = -1
 
 export const SEED_CATEGORIES = [
   {
-    id: UNCATEGORIZED_ID,
-    name: '未分类',
+    id: PENDING_CATEGORY_ID,
+    name: '待分类',
     description: '系统分类，删除其他分类时商品自动归入这里',
     createdAt: '2026-08-01 09:00',
     system: true,

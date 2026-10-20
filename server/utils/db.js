@@ -1,6 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { ROLE_PRESETS } from '#shared/permissions'
-import { SEED_CATEGORIES, SEED_LOGS, SEED_PRODUCTS, UNCATEGORIZED_ID } from '#shared/seed'
+import { PENDING_CATEGORY_ID, SEED_CATEGORIES, SEED_LOGS, SEED_PRODUCTS } from '#shared/seed'
 
 /**
  * 内存数据库：进程内单例，重启回到种子状态（练手项目刻意选择，省掉 fs）。
@@ -87,15 +87,43 @@ function createDb() {
       return this.logs
     },
 
-    /* products（列表接口下一步用） */
-    listProducts() {
-      return this.products
+    /* products */
+    /**
+     * 分页 + 筛选都在这里做，接口层只负责解析 query。
+     * 排序固定 id 升序：分页不跳行，编辑后位置不变。
+     */
+    listProducts({ q = '', categoryId = null, status = null, page = 1, pageSize = 8 } = {}) {
+      const keyword = q.trim().toLowerCase()
+      // categoryId 为 null 表示不筛；待分类的 id 是 -1，所以只能拿 null 当哨兵
+      const filtered = this.products.filter((item) => {
+        if (categoryId !== null && item.categoryId !== categoryId) return false
+        if (status !== null && item.status !== status) return false
+        if (keyword && !`${item.name} ${item.sku}`.toLowerCase().includes(keyword)) return false
+        return true
+      })
+      const start = (page - 1) * pageSize
+      return {
+        items: filtered.slice(start, start + pageSize).sort((a, b) => a.id - b.id),
+        total: filtered.length,
+      }
     },
     findProduct(id) {
       return this.products.find(p => p.id === id) ?? null
     },
     nextProductId() {
       return productSeq++
+    },
+    updateProduct(id, patch) {
+      const product = this.findProduct(id)
+      if (!product) return null
+      Object.assign(product, patch)
+      return product
+    },
+    deleteProduct(id) {
+      const index = this.products.findIndex(p => p.id === id)
+      if (index < 0) return null
+      const [removed] = this.products.splice(index, 1)
+      return removed
     },
 
     /* categories */
@@ -129,7 +157,7 @@ function createDb() {
       category.description = description
       return category
     },
-    /** 删除分类：该分类下的商品先移到「未分类」，再移除分类本身 */
+    /** 删除分类：该分类下的商品先移到「待分类」，再移除分类本身 */
     deleteCategory(id) {
       const index = this.categories.findIndex(c => c.id === id)
       if (index < 0) return null
@@ -138,7 +166,7 @@ function createDb() {
       let moved = 0
       for (const product of this.products) {
         if (product.categoryId === id) {
-          product.categoryId = UNCATEGORIZED_ID
+          product.categoryId = PENDING_CATEGORY_ID
           moved += 1
         }
       }

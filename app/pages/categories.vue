@@ -89,13 +89,13 @@ async function onSubmit() {
   }
 }
 
-/* ---------- 删除：有商品也允许，商品会移入「未分类」 ---------- */
+/* ---------- 删除：有商品也允许，商品会移入「待分类」 ---------- */
 async function onDelete(row) {
   if (row.system) return
 
   const warning = row.productCount > 0
     ? `确定删除分类「${row.name}」吗？
-    该分类下有 ${row.productCount} 件商品，删除后这些商品将移入「未分类」。`
+    该分类下有 ${row.productCount} 件商品，删除后这些商品将移入「待分类」。`
     : `确定删除分类「${row.name}」吗？`
 
   try {
@@ -116,7 +116,7 @@ async function onDelete(row) {
 
   try {
     const res = await $fetch(`/api/categories/${row.id}`, { method: 'DELETE' })
-    ElMessage.success(res.moved > 0 ? `已删除，${res.moved} 件商品移入「未分类」` : '已删除')
+    ElMessage.success(res.moved > 0 ? `已删除，${res.moved} 件商品移入「待分类」` : '已删除')
     await refresh()
   }
   catch (err) {
@@ -180,7 +180,7 @@ async function onDelete(row) {
       </el-table>
 
       <div class="table-foot">
-        <span class="hint">共 {{ categories.length }} 条 · 删除分类后，其下商品会自动移入「未分类」</span>
+        <span class="hint">共 {{ categories.length }} 条 · 删除分类后，其下商品会自动移入「待分类」</span>
       </div>
     </section>
 
