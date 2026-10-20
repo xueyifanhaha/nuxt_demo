@@ -43,11 +43,7 @@ async function onLogout() {
     <aside class="sidebar">
       <div class="brand">
         <span class="mark">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 8.5 12 4l9 4.5-9 4.5-9-4.5Z" />
-            <path d="M3 8.5v7L12 20l9-4.5v-7" />
-            <path d="M12 13v7" />
-          </svg>
+          
         </span>
         <span class="brand-name">商品运营后台</span>
       </div>
