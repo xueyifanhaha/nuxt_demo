@@ -12,13 +12,46 @@ export default defineNuxtConfig({
     externals: {
       inline: ['pinia'],
     },
+    // 构建时预生成 .gz/.br 文件，服务时按 Accept-Encoding 直发，
+    // 不用运行时压缩（省 CPU，且 brotli 比运行时 gzip 小 15-20%）。
+    compressPublicAssets: true,
+  },
+
+  // 分包策略（vite 8 = rolldown 内核，chunk 名会被 Nuxt 的 [hash].js 掩盖，
+  // 验证分包效果只能靠构建产物实测，不能看文件名）。
+  // 实测结论（2026-10-20，login 首访 gzip）：
+  //   默认分包 131KB < 按组件细拆 143KB < element-plus 整块 vendor 189KB。
+  // element-plus 交给默认分包最划算：ElMessage/ElForm 等共享代码本来就该
+  // 和组件合并进同一 chunk。这里只拆走最稳定的 vue 全家桶和 dayjs 吃长缓存。
+  vite: {
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return
+            if (id.includes('dayjs')) return 'dayjs'
+            if (
+              /[\\/]node_modules[\\/](@vue|vue|vue-router|vue-demi|pinia)[\\/]/.test(id)
+            ) {
+              return 'vue-vendor'
+            }
+            // 其余（含 element-plus）不动，用默认分包
+          },
+        },
+      },
+    },
   },
 
   css: ['~/assets/css/main.css'],
 
-  // 登录态守卫会把未登录用户送去 /login；根路径直接进商品列表
+  // 登录态守卫会把未登录用户送去 /login；根路径直接进商品列表。
+  // _nuxt 下的产物带内容 hash，内容永不变 → 永久强缓存，
+  // immutable 让浏览器连条件请求（304 协商）都省掉。
   routeRules: {
     '/': { redirect: '/products' },
+    '/_nuxt/**': {
+      headers: { 'Cache-Control': 'public, max-age=31536000, immutable' },
+    },
   },
 
   app: {
