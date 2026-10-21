@@ -31,62 +31,19 @@ const headerStyle = {
   fontSize: '13px',
 }
 
-/* ---------- 新增 / 编辑弹窗 ---------- */
+/* ---------- 新增 / 编辑弹窗（LazyCategoryEditDialog 异步加载，打开时才下载） ---------- */
 const dialogVisible = ref(false)
 const editing = ref(null) // null = 新建
-const submitting = ref(false)
-
-const formRef = ref()
-const form = reactive({ name: '', description: '' })
-const rules = {
-  name: [
-    { required: true, message: '请输入分类名称', trigger: 'blur' },
-    { min: 2, max: 20, message: '长度 2 - 20 个字符', trigger: 'blur' },
-  ],
-  description: [{ max: 100, message: '不超过 100 个字符', trigger: 'blur' }],
-}
 
 function openCreate() {
   editing.value = null
-  form.name = ''
-  form.description = ''
   dialogVisible.value = true
 }
 
 function openEdit(row) {
   if (row.system) return
   editing.value = row
-  form.name = row.name
-  form.description = row.description ?? ''
   dialogVisible.value = true
-}
-
-async function onSubmit() {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  const payload = { name: form.name.trim(), description: form.description.trim() }
-
-  submitting.value = true
-  try {
-    if (editing.value) {
-      await $fetch(`/api/categories/${editing.value.id}`, { method: 'PUT', body: payload })
-      ElMessage.success(`已保存分类「${payload.name}」`)
-    }
-    else {
-      await $fetch('/api/categories', { method: 'POST', body: payload })
-      ElMessage.success(`已创建分类「${payload.name}」`)
-    }
-    dialogVisible.value = false
-    await refresh()
-  }
-  catch (err) {
-    // 重名 409、长度 400 等都带服务端 message，弹窗保持打开让用户改
-    ElMessage.error(errorMessage(err, '保存失败，请稍后重试'))
-  }
-  finally {
-    submitting.value = false
-  }
 }
 
 /* ---------- 删除：有商品也允许，商品会移入「待分类」 ---------- */
@@ -184,22 +141,9 @@ async function onDelete(row) {
       </div>
     </section>
 
-    <el-dialog v-model="dialogVisible" :title="editing ? `编辑分类 · ${editing.name}` : '新建分类'" width="440px"
-      destroy-on-close>
-      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
-        <el-form-item label="分类名称" prop="name">
-          <el-input v-model="form.name" placeholder="如：手机数码" maxlength="20" show-word-limit />
-        </el-form-item>
-        <el-form-item label="描述" prop="description">
-          <el-input v-model="form.description" type="textarea" :rows="3" placeholder="选填，简单说明这个分类放什么" maxlength="100"
-            show-word-limit />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="onSubmit">保存</el-button>
-      </template>
-    </el-dialog>
+    <!-- v-if 才是真按需：关闭时组件整个卸载，chunk 只在首次点开时下载。
+         不加 v-if 的话 Nuxt 会把异步 chunk 预加载进路由（实测首访照样拉）。 -->
+    <LazyCategoryEditDialog v-if="dialogVisible" v-model="dialogVisible" :editing="editing" @saved="refresh()" />
   </div>
 </template>
 
